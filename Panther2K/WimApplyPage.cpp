@@ -1,0 +1,213 @@
+﻿#include "WimApplyPage.h"
+#include "WindowsSetup.h"
+#include <iostream>
+#include <process.h>
+
+#define WM_WIMAPPLYFAILED WM_APP
+#define WM_PROGRESSUPDATE WM_APP + 1
+#define WM_FILENAMEUPDATE WM_APP + 2
+
+bool canSendProgress = true;
+bool canSendFileName = true;
+int progress = 0;
+DWORD __stdcall MessageCallback(IN DWORD Msg, IN WPARAM wParam, IN LPARAM lParam, IN PDWORD dwThreadId)
+{
+	switch (Msg)
+	{
+	case WIM_MSG_PROGRESS:
+		if (canSendProgress)
+			if (PostThreadMessageW(*dwThreadId, WM_PROGRESSUPDATE, wParam, 0))
+				canSendProgress = false;
+		break;
+	case WIM_MSG_PROCESS:
+		if (WindowsSetup::ShowFileNames && canSendFileName)
+			if (PostThreadMessageW(*dwThreadId, WM_FILENAMEUPDATE, wParam, 0))
+				canSendFileName = false;
+		break;
+	}
+	return WIM_MSG_SUCCESS;
+}
+
+void __stdcall WimApplyThread(PDWORD dwThreadId)
+{
+	WIMRegisterMessageCallback(WindowsSetup::WimHandle, (FARPROC)MessageCallback, dwThreadId);
+	HANDLE him = WIMLoadImage(WindowsSetup::WimHandle, WindowsSetup::WimImageIndex);
+	WIMApplyImage(him, WindowsSetup::Partition3Mount, WindowsSetup::ShowFileNames ? WIM_FLAG_FILEINFO : 0);
+	int hresult = GetLastError();
+	WIMUnregisterMessageCallback(WindowsSetup::WimHandle, (FARPROC)MessageCallback);
+	while (!canSendProgress) {}
+	if (hresult != 0)
+		hresult = PostThreadMessageW(*dwThreadId, WM_WIMAPPLYFAILED, hresult, 0);
+	else
+		hresult = PostThreadMessageW(*dwThreadId, WM_PROGRESSUPDATE, 100, 0);
+}
+
+void WimApplyPage::WimMessageLoop()
+{
+	MSG msg;
+	int progress = 0;
+    wchar_t* filename = 0;
+	while (true) 
+	{
+		WaitMessage();
+		progress = 0;
+		filename = 0;
+		while (PeekMessageW(&msg, nullptr, WM_WIMAPPLYFAILED, WM_FILENAMEUPDATE, true))
+		{
+			switch (msg.message)
+			{
+			case WM_WIMAPPLYFAILED:
+				goto end;
+				break;
+			case WM_PROGRESSUPDATE:
+				progress = msg.wParam;
+				break;
+			case WM_FILENAMEUPDATE:
+				filename = (wchar_t*)msg.wParam;
+				break;
+			}
+		}
+		if (progress == 100)
+			goto end;
+		else if (progress)
+			Update(progress);
+		if (filename)
+			Update(filename);
+
+		canSendProgress = true;
+		canSendFileName = true;
+
+		while (PeekMessageW(&msg, nullptr, 0, WM_WIMAPPLYFAILED - 1, true))
+		{
+			TranslateMessage(&msg);
+			DispatchMessageW(&msg);
+		}
+	}
+end:
+	return;
+}
+
+WimApplyPage::~WimApplyPage()
+{
+	free((wchar_t*)text);
+}
+
+void WimApplyPage::Update(int prog)
+{
+	progress = prog;
+	Redraw();
+	DoEvents();
+}
+
+void WimApplyPage::Update(wchar_t* fileName)
+{
+	if (fileName)
+	{
+		int length = console->GetSize().cx;
+		int bufferSize = length + 1;
+		int nameX = length - (12 + WindowsSetup::FileNameLength);
+
+		if (!filename)
+		{
+			wchar_t* buffer = (wchar_t*)malloc(sizeof(wchar_t) * bufferSize);
+			if (!buffer)
+				return; 
+			statusText = buffer;
+		}
+		
+		filename = fileName;
+
+		swprintf((wchar_t*)statusText, bufferSize, L"  Panther2K is installing Windows...%*s%cCopying: %s", nameX - 36, L"", WindowsSetup::UseCp437 ? L'\xB3' : L'│', filename + (lstrlenW(filename) - WindowsSetup::FileNameLength));
+		Redraw();
+	}
+	DoEvents();
+}
+
+void WimApplyPage::ApplyImage()
+{
+	DWORD dwThreadId = GetCurrentThreadId();
+	CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WimApplyThread, &dwThreadId, 0, 0);
+	//_beginthreadex(NULL, NULL, (_beginthreadex_proc_type)WimApplyThread, &dwThreadId, NULL, NULL);
+	WimMessageLoop();
+}
+
+void WimApplyPage::Init()
+{
+	wchar_t* displayName = WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].DisplayName;
+	int length = lstrlenW(displayName);
+	wchar_t* textBuffer = (wchar_t*)malloc(length * sizeof(wchar_t) + 14);
+	if (textBuffer)
+	{
+		memcpy(textBuffer, displayName, length * sizeof(wchar_t));
+		memcpy(textBuffer + length, L" Setup", 14);
+		text = textBuffer;
+	}
+	else
+	{
+		text = L"Panther2K Setup";
+	}
+	statusText = L"  Panther2K is installing Windows...";
+}
+
+void WimApplyPage::Drawer()
+{
+	SIZE consoleSize = console->GetSize();
+	
+	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
+	console->SetForegroundColor(WindowsSetup::ForegroundColor);
+
+	console->SetPosition((consoleSize.cx / 2) - 18, 6);
+	console->Write(L"Please wait while Setup copies files");
+
+	console->SetPosition((consoleSize.cx / 2) - 18, 7);
+	console->Write(L"to the Windows installation folders.");
+
+	console->SetPosition((consoleSize.cx / 2) - 22, 8);
+	console->Write(L"This might take several minutes to complete.");
+	
+	int boxWidth = consoleSize.cx - 12;
+	int boxHeight = 7;
+	int boxX = 6;
+	int boxY = consoleSize.cy / 2 - 1;
+	DrawBox(boxX, boxY, boxWidth, boxHeight, true);
+	console->SetPosition(boxX + 2, boxY + 1);
+	console->Write(L"Setup is copying files...");
+	boxX += 6;
+	boxY += 3;
+	boxWidth -= 12;
+	boxHeight -= 4;
+	DrawBox(boxX, boxY, boxWidth, boxHeight, false);
+}
+
+void WimApplyPage::Redrawer()
+{
+	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
+	console->SetForegroundColor(WindowsSetup::ForegroundColor);
+
+	SIZE consoleSize = console->GetSize();
+	int boxWidth = consoleSize.cx - 12;
+	int boxX = 6;
+	int boxY = consoleSize.cy / 2 - 1;
+
+	wchar_t buffer[5];
+	swprintf(buffer, 5, L"%i%%", progress);
+	console->SetPosition(boxX + ((boxWidth / 2) - (4 / 2)), boxY + 2);
+	console->Write(buffer);
+
+	boxX += 6;
+	boxY += 3;
+	boxWidth -= 12;
+
+	console->SetPosition(boxX + 1, boxY + 1);
+	int progWidth = boxWidth - 2;
+	int interpolatedProgress = progress * progWidth / 100;
+	console->SetForegroundColor(WindowsSetup::ProgressBarColor);
+	for (int i = 0; i < interpolatedProgress; i++)
+		console->Write(WindowsSetup::UseCp437 ? L"\xDB" : L"█");
+	for (int i = interpolatedProgress; i < progWidth; i++)
+		console->Write(L" ");
+}
+
+void WimApplyPage::KeyHandler(WPARAM wParam)
+{
+}

@@ -71,6 +71,63 @@ int GetEncoderClsid(const WCHAR* format, CLSID* pClsid)
     return -1;  // Failure
 }
 
+wchar_t** SplitStringToLines(const wchar_t* string, int maxWidth, int* lineCount)
+{
+    int strLen = lstrlenW(string);
+    if (strLen <= 0)
+        return 0;
+
+    wchar_t* wordList = (wchar_t*)malloc(sizeof(wchar_t) * (strLen + 1));
+    wchar_t* endValues = (wchar_t*)malloc(sizeof(wchar_t) * (strLen + 1));
+    if (!wordList || !endValues)
+        return 0;
+    wordList[strLen] = L'\x0';
+    endValues[strLen] = L'\x0';
+
+    // Split by words
+    for (int i = 0; i < (strLen + 1); i++)
+    {
+        wordList[i] = string[i];
+        if (wordList[i] == L' ')
+            wordList[i] = L'\0';
+    }
+
+    // Determine where to put a space, a null character or nothing
+    int lineWidth = -1;
+    (*lineCount) = 1;
+    for (int i = 0; i < (strLen + 1); i += lstrlenW(wordList + i) + 1)
+    {
+        int wordSize = lstrlenW(wordList + i);
+        if (lineWidth == -1)
+        {
+            memcpy(endValues + i, wordList + i, sizeof(wchar_t) * wordSize);
+        }
+        else
+        {
+            if (lineWidth + wordSize + 1 <= maxWidth)
+                endValues[i - 1] = L' ';
+            else
+            {
+                endValues[i - 1] = L'\x0';
+                lineWidth = -1;
+                (*lineCount)++;
+            }
+            memcpy(endValues + i, wordList + i, sizeof(wchar_t) * wordSize);
+        }
+        lineWidth += wordSize + 1;
+    }
+
+    // Remove temporary word list
+    free(wordList);
+
+    // Get pointers to all strings
+    wchar_t** returnValue = (wchar_t**)malloc((*lineCount) * sizeof(wchar_t*));
+    for (int i = 0, j = 0; i < (strLen + 1); i += lstrlenW(endValues + i) + 1, j++)
+        returnValue[j] = endValues + i;
+
+    return returnValue;
+}
+
 void Console::Init()
 {
     font = CreateFontW(16, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Bm437 IBM VGA 8x16");
@@ -105,24 +162,6 @@ Console* Console::CreateConsole()
     return console;
 }
 
-void Console::LClear()
-{
-    if (lastCreatedConsole != 0)
-        lastCreatedConsole->Clear();
-}
-
-void Console::LWrite(const wchar_t* string)
-{
-    if (lastCreatedConsole != 0)
-        lastCreatedConsole->LWrite(string);
-}
-
-void Console::LWriteLine(const wchar_t* string)
-{
-    if (lastCreatedConsole != 0)
-        lastCreatedConsole->WriteLine(string);
-}
-
 void Console::Clear()
 {
     RECT rect;
@@ -137,6 +176,14 @@ void Console::Clear()
         int x = i % columns;
         int y = i / columns;
 
+        /*Color cb(screenBuffer[i].backColor.R, screenBuffer[i].backColor.G, screenBuffer[i].backColor.B);
+        SolidBrush bb(cb);
+        Color cf(screenBuffer[i].foreColor.R, screenBuffer[i].foreColor.G, screenBuffer[i].foreColor.B);
+        SolidBrush bf(cf);
+        Rect r(x * fontWidth, y * fontHeight, fontWidth, fontHeight);
+        Point p(r.GetLeft(), r.GetTop());
+        PointF p2(r.GetLeft(), r.GetTop());*/
+
         rect.left = x * fontWidth;
         rect.top = y * fontHeight;
         rect.right = rect.left + fontWidth;
@@ -145,6 +192,9 @@ void Console::Clear()
         HBRUSH bgBr = CreateSolidBrush(screenBuffer[i].backColor.ToColor());
         FillRect(hdcBuf, &rect, bgBr);
         DeleteObject(bgBr);
+
+        //((Graphics*)gBuf)->FillRectangle(&bb, r);
+        //((Graphics*)gBuf)->DrawString(&screenBuffer[i].character, 1, (Font*)fBuf, p2, &bf);
 
         SetTextColor(hdcBuf, screenBuffer[i].foreColor.ToColor());
         DrawText(hdcBuf, &screenBuffer[i].character, 1, &rect, DT_LEFT | DT_TOP);
@@ -189,8 +239,16 @@ void Console::Write(const wchar_t* string)
         //screenBuffer[screenPointerX + (screenPointerY * columns)] = characters[i];
         SetBit(screenBufferUpdateFlags, screenPointerX + (screenPointerY * columns));
 
-        int x = j % columns;
-        int y = j / columns;
+        int x = screenPointerX;
+        int y = screenPointerY;
+
+        /*Color cb(screenBuffer[i].backColor.R, screenBuffer[i].backColor.G, screenBuffer[i].backColor.B);
+        SolidBrush bb(cb);
+        Color cf(screenBuffer[i].foreColor.R, screenBuffer[i].foreColor.G, screenBuffer[i].foreColor.B);
+        SolidBrush bf(cf);
+        Rect r(x * fontWidth, y * fontHeight, fontWidth, fontHeight);
+        Point p(r.GetLeft(), r.GetTop());
+        PointF p2(r.GetLeft(), r.GetTop());*/
 
         rect.left = x * fontWidth;
         rect.top = y * fontHeight;
@@ -200,6 +258,9 @@ void Console::Write(const wchar_t* string)
         HBRUSH bgBr = CreateSolidBrush(screenBuffer[j].backColor.ToColor());
         FillRect(hdcBuf, &rect, bgBr);
         DeleteObject(bgBr);
+
+        //((Graphics*)gBuf)->FillRectangle(&bb, r);
+        //((Graphics*)gBuf)->DrawString(&screenBuffer[i].character, 1, (Font*)fBuf, p2, &bf);
 
         SetTextColor(hdcBuf, screenBuffer[j].foreColor.ToColor());
         DrawText(hdcBuf, &screenBuffer[j].character, 1, &rect, DT_LEFT | DT_TOP);
@@ -218,6 +279,39 @@ void Console::WriteLine(const wchar_t* string)
 {
     Write(string);
     Write(L"\n");
+}
+
+int Console::WriteLinesLeft(const wchar_t* string, int maxWidth)
+{
+    int lineCount = 0;
+    wchar_t** strings = SplitStringToLines(string, maxWidth, &lineCount);
+
+    int x = (columns / 2) - (maxWidth / 2), y = screenPointerY;
+    for (int i = 0; i < lineCount; i++, y++)
+    {
+        SetPosition(x, y);
+        Write(strings[i]);
+    }
+    SetPosition(x, y + 1);
+
+    return lineCount;
+}
+
+int Console::WriteLinesCentered(const wchar_t* string, int maxWidth)
+{
+    int lineCount = 0;
+    wchar_t** strings = SplitStringToLines(string, maxWidth, &lineCount);
+
+    int y = screenPointerY;
+    for (int i = 0; i < lineCount; i++, y++)
+    {
+        int x = (columns / 2) - (lstrlenW(strings[i]) / 2);
+        SetPosition(x, y);
+        Write(strings[i]);
+    }
+    SetPosition((columns / 2) - (maxWidth / 2), y + 1);
+
+    return lineCount;
 }
 
 void Console::RedrawImmediately()
@@ -313,6 +407,9 @@ DISPLAYCHAR* Console::WcharPointerToDisplayCharPointer(const wchar_t* string)
 
 Console::Console()
 {
+    /*bBuf = 0;
+    gBuf = 0;
+    fBuf = 0;*/
     hBuf = 0;
     hdcBuf = 0;
     threadId = 0;
@@ -362,6 +459,9 @@ void Console::ReloadSettings(long c, long r, HFONT fontt)
     DeleteDC(hdcBuf);
     hBuf = 0;
     hdcBuf = 0;
+    /*if (bBuf) bBuf->~Bitmap();
+    if (gBuf) gBuf->~Graphics();
+    if (fBuf) fBuf->~Font();*/
 
     PAINTSTRUCT ps;
     HDC hdc = BeginPaint(WindowHandle, &ps);
@@ -377,8 +477,21 @@ void Console::ReloadSettings(long c, long r, HFONT fontt)
     fontHeight = fSize.cy;
     SelectObject(hdc, old);
     
+    /*BITMAPINFO bi = { 0 };
+    BITMAPINFOHEADER& bih = bi.bmiHeader;
+    bih.biSize = sizeof(BITMAPINFOHEADER);
+    bih.biWidth = columns * fontWidth, bih.biHeight = -(rows * fontHeight);
+    bih.biPlanes = 1, bih.biBitCount = 24;
+    bih.biCompression = BI_RGB;
+    void* bits;*/
+    //hBuf = CreateDIBSection(NULL, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    //hBuf = CreateBitmap(columns * fontWidth, rows * fontHeight, 1, 24, NULL);
     hBuf = CreateCompatibleBitmap(hdc, columns * fontWidth, rows * fontHeight);
     hdcBuf = CreateCompatibleDC(hdc);
+
+    //bBuf = new Bitmap(columns * fontWidth, rows * fontHeight, PixelFormat32bppPARGB);
+    //fBuf = new Font(hdc, font);
+    //gBuf = Graphics::FromImage(bBuf);
 
     SetBkMode(hdcBuf, TRANSPARENT);
     SelectObject(hdcBuf, font);
@@ -449,6 +562,10 @@ LRESULT CALLBACK Console::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPa
         hBuf = CreateCompatibleBitmap(hdc, columns * fontWidth, rows * fontHeight);
         hdcBuf = CreateCompatibleDC(hdc);
 
+        /*bBuf = new Bitmap(columns * fontWidth, rows * fontHeight, PixelFormat32bppPARGB);
+        fBuf = new Font(hdc, font);
+        gBuf = Graphics::FromImage(bBuf);*/
+
         SetBkMode(hdcBuf, TRANSPARENT);
         SelectObject(hdcBuf, font);
         SelectObject(hdcBuf, hBuf);
@@ -497,11 +614,24 @@ LRESULT CALLBACK Console::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPa
 
             GetClientRect(hWnd, &rect);
 
+            /*SetStretchBltMode(hdc, COLORONCOLOR);
+            StretchBlt(hdc, rect.left, rect.top, rect.right, rect.bottom, hdcBuf, 0, 0, columns * fontWidth, rows * fontHeight, SRCCOPY);*/
+
             Graphics g(hdc);
+            
             g.SetCompositingMode(CompositingModeSourceCopy);
             Image* z = (Image*)Bitmap::FromHBITMAP(hBuf, NULL);
+
+            /*float scaleX = static_cast<float>(z->GetWidth()) / static_cast<float>(rect.right - rect.left);
+            float scaleY = static_cast<float>(z->GetHeight()) / static_cast<float>(rect.bottom - rect.top);
+            Gdiplus::Matrix m(scaleX, 0, 0, scaleY, 0, 0);
+            
+            g.SetTransform(&m);*/
             g.DrawImage(z, 0, 0, rect.right - rect.left, rect.bottom - rect.top);
+            //g.ResetTransform();
+
             delete z;
+            //m.~Matrix();
             g.~Graphics();
 
             EndPaint(hWnd, &ps);

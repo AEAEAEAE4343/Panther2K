@@ -8,6 +8,7 @@
 #include "BootPreparationPage.h"
 #include "FinalPage.h"
 #include "MessageBoxPage.h"
+#include "PartitionSelectionPage.h"
 
 #include "Logger.h"
 
@@ -49,17 +50,21 @@ ImageInfo* WindowsSetup::WimImageInfos = 0;
 int WindowsSetup::WimImageIndex = 0;
 
 bool WindowsSetup::UseLegacy = false;
+
 const wchar_t* WindowsSetup::Partition1Volume = L"";
 const wchar_t* WindowsSetup::Partition2Volume = L"";
 const wchar_t* WindowsSetup::Partition3Volume = L"";
 const wchar_t* WindowsSetup::Partition1Mount = L"";
 const wchar_t* WindowsSetup::Partition2Mount = L"";
 const wchar_t* WindowsSetup::Partition3Mount = L"";
-
-bool WindowsSetup::ContinueWithoutRecovery = true;
+bool WindowsSetup::AllowOtherFileSystems = true;
 
 bool WindowsSetup::ShowFileNames = true;
 int WindowsSetup::FileNameLength = 12;
+
+bool WindowsSetup::ContinueWithoutRecovery = true;
+
+int WindowsSetup::RebootTimer = 10000;
 
 Console* WindowsSetup::console = 0;
 Page* WindowsSetup::currentPage = 0;
@@ -100,63 +105,6 @@ wchar_t* ConCatW(const wchar_t* s1, const wchar_t* s2)
 	memcpy(result, s1, len1 * sizeof(wchar_t));
 	memcpy(result + len1, s2, (len2 + 1) * sizeof(wchar_t)); // +1 to copy the null-terminator
 	return result;
-}
-
-wchar_t** SplitStringToLines(const wchar_t* string, int maxWidth, int* lineCount)
-{
-	int strLen = lstrlenW(string);
-	if (strLen <= 0)
-		return 0;
-
-	wchar_t* wordList = (wchar_t*)malloc(sizeof(wchar_t) * (strLen + 1));
-	wchar_t* endValues = (wchar_t*)malloc(sizeof(wchar_t) * (strLen + 1));
-	if (!wordList || !endValues)
-		return 0;
-	wordList[strLen] = L'\x0';
-	endValues[strLen] = L'\x0';
-
-	// Split by words
-	for (int i = 0; i < (strLen + 1); i++)
-	{
-		wordList[i] = string[i];
-		if (wordList[i] == L' ')
-			wordList[i] = L'\0';
-	}
-
-	// Determine where to put a space, a null character or nothing
-	int lineWidth = -1;
-	(*lineCount) = 1;
-	for (int i = 0; i < (strLen + 1); i += lstrlenW(wordList + i) + 1)
-	{
-		int wordSize = lstrlenW(wordList + i);
-		if (lineWidth == -1)
-		{
-			memcpy(endValues + i, wordList + i, sizeof(wchar_t) * wordSize);
-		}
-		else
-		{
-			if (lineWidth + wordSize + 1 <= maxWidth)
-				endValues[i - 1] = L' ';
-			else
-			{
-				endValues[i - 1] = L'\x0';
-				lineWidth = -1;
-				(*lineCount)++;
-			}
-			memcpy(endValues + i, wordList + i, sizeof(wchar_t) * wordSize);
-		}
-		lineWidth += wordSize + 1;
-	}
-
-	// Remove temporary word list
-	free(wordList);
-
-	// Get pointers to all strings
-	wchar_t** returnValue = (wchar_t**)malloc((*lineCount) * sizeof(wchar_t*));
-	for (int i = 0, j = 0; i < (strLen + 1); i += lstrlenW(endValues + i) + 1, j++)
-		returnValue[j] = endValues + i;
-
-	return returnValue;
 }
 
 wchar_t WindowsSetup::GetFirstFreeDrive()
@@ -308,8 +256,8 @@ bool WindowsSetup::LoadConfig()
 	MessageBoxPage* msgBox = 0;
 
 	_wgetcwd(rootCwdPath, MAX_PATH);
-	GetModuleFileNameW(NULL, rootFilePath, MAX_PATH);
 	PathStripToRootW(rootCwdPath);
+	GetModuleFileNameW(NULL, rootFilePath, MAX_PATH);
 	PathStripToRootW(rootFilePath);
 
 	GetFullPathNameW(L"panther.ini", MAX_PATH, INIFile, NULL);
@@ -465,7 +413,9 @@ bool WindowsSetup::LoadConfig()
 			}
 		}
 	}
-
+	GetPrivateProfileStringW(L"Phase4", L"AllowOtherFileSystems", L"No", buffer, 4, INIFile);
+	AllowOtherFileSystems = ParseBool(buffer);
+	
 	// Phase 5
 	GetPrivateProfileStringW(L"Phase5", L"ShowFileNames", L"No", buffer, 4, INIFile);
 	ShowFileNames = ParseBool(buffer);
@@ -473,6 +423,9 @@ bool WindowsSetup::LoadConfig()
 	// Phase 6
 	GetPrivateProfileStringW(L"Phase6", L"ContinueWithoutRecovery", L"Yes", buffer, 4, INIFile);
 	ContinueWithoutRecovery = ParseBool(buffer);
+
+	// Phase 7
+	RebootTimer = GetPrivateProfileIntW(L"Phase7", L"RebootTimer", 10000, INIFile);
 
 	// Console
 	GetPrivateProfileStringW(L"Console", L"ColorScheme", L"Windows Setup", buffer, MAX_PATH, INIFile);
@@ -532,7 +485,7 @@ bool WindowsSetup::LoadConfig()
 	}
 
 	int columns = GetPrivateProfileIntW(L"Console", L"Columns", 80, INIFile);
-	int rows = GetPrivateProfileIntW(L"Console", L"Rows", 33, INIFile);
+	int rows = GetPrivateProfileIntW(L"Console", L"Rows", 25, INIFile);
 	int fontHeight = GetPrivateProfileIntW(L"Console", L"FontHeight", -1, INIFile);
 	if (fontHeight == -1)
 	{
@@ -650,6 +603,8 @@ void WindowsSetup::LoadPhase(int phase)
 			break;
 		}
 	case 4:
+		SelectNextPartition(-1, 1);
+		return;
 		// TODO: Find out what partitions the user wants to install to
 		//if (!SkipPhase4_1)
 		//{
@@ -680,6 +635,117 @@ void WindowsSetup::LoadPhase(int phase)
 	default:
 		page = new Page();
 		break;
+	}
+
+	LoadPage(page);
+}
+
+void WindowsSetup::SelectPartition(int stringIndex, VOLUME_INFO volume)
+{
+	int partitionIds[4] = { 3, 1, 1, 2 };
+	wchar_t buffer[MAX_PATH + 1];
+	wchar_t rootPath[MAX_PATH + 1];
+
+	_wgetcwd(rootPath, MAX_PATH);
+	PathStripToRootW(rootPath);
+
+	const wchar_t** targetVolume;
+	const wchar_t** targetMount;
+	const wchar_t* mount;
+	switch (partitionIds[stringIndex])
+	{
+	case 1:
+		targetVolume = &Partition1Volume;
+		targetMount = &Partition1Mount;
+		mount = L"$Panther2K\\Sys\\";
+		break;
+	case 2:
+		targetVolume = &Partition2Volume;
+		targetMount = &Partition2Mount;
+		mount = L"$Panther2K\\Rec\\";
+		break;
+	case 3:
+		targetVolume = &Partition3Volume;
+		targetMount = &Partition3Mount;
+		mount = L"$Panther2K\\Win\\";
+		break;
+	default:
+		return;
+	}
+	(*targetVolume) = (wchar_t*)malloc(sizeof(wchar_t) * (MAX_PATH + 1));
+	(*targetMount) = (wchar_t*)malloc(sizeof(wchar_t) * (MAX_PATH + 1));
+	if (!(*targetVolume) || !(*targetMount))
+		return;
+
+	lstrcpyW((LPWSTR)*targetVolume, volume.guid);
+	if (lstrcmpW(volume.mountPoint, L"") == 0)
+	{
+		buffer[0] = L'V';
+		lstrcpyW(buffer + 1, volume.guid);
+		LoadPartitionFromVolume(buffer, rootPath, mount, targetVolume, targetMount);
+	}
+	else
+		lstrcpyW((LPWSTR)*targetMount, volume.mountPoint);
+}
+
+void WindowsSetup::SelectNextPartition(int stringIndex, int direction)
+{
+	Page* page;
+	int partitionIds[4] = { 3, 1, 1, 2 };
+
+	// Legacy / UEFI overrides
+	int nextPage = stringIndex + direction;
+	if (nextPage == 1 && UseLegacy)
+		nextPage += direction;
+	else if (nextPage == 2 && !UseLegacy)
+		nextPage += direction;
+	else if (nextPage == 3 && UseLegacy)
+		nextPage += direction;
+	
+	// Config overrides
+	if (partitionIds[nextPage] == 1 && SkipPhase4_1)
+		nextPage += direction;
+	else if (partitionIds[nextPage] == 2 && SkipPhase4_2)
+		nextPage += direction;
+	else if (partitionIds[nextPage] == 3 && SkipPhase4_3)
+		nextPage += direction;
+
+	// Navigate out of Phase 4
+	if (nextPage == -1)
+	{
+		LoadPhase(3);
+		return;
+	}
+	else if (nextPage == 4)
+	{
+		LoadPhase(5);
+		return;
+	}
+
+	// If there were overrides, re-evaluate everything
+	if (nextPage != stringIndex + direction)
+	{
+		nextPage -= direction;
+		SelectNextPartition(nextPage, direction);
+		return;
+	}
+
+	switch (nextPage)
+	{
+	case 0:
+		page = new PartitionSelectionPage(L"NTFS", 0, 0, 0); 
+		break;
+	case 1:
+		page = new PartitionSelectionPage(L"FAT32", 0, 40000000, 1);
+		break;
+	case 2:
+		page = new PartitionSelectionPage(L"NTFS", 500000000, 0, 2);
+		break;
+	case 3:
+		page = new PartitionSelectionPage(L"NTFS", 500000000, 0, 3);
+		break;
+	default:
+		return;
 	}
 
 	LoadPage(page);

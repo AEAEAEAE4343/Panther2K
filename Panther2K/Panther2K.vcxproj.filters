@@ -72,11 +72,14 @@
     <ClInclude Include="FinalPage.h">
       <Filter>Header Files\Pages</Filter>
     </ClInclude>
-    <ClInclude Include="MessageBoxPage.h">
+    <ClInclude Include="wdkpartial.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="PartitionSelectionPage.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Pages</Filter>
+    </ClInclude>
+    <ClInclude Include="MessageBoxPage.h">
+      <Filter>Header Files\Pages</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -119,11 +122,11 @@
     <ClCompile Include="FinalPage.cpp">
       <Filter>Source Files\Pages</Filter>
     </ClCompile>
-    <ClCompile Include="MessageBoxPage.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="PartitionSelectionPage.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Pages</Filter>
+    </ClCompile>
+    <ClCompile Include="MessageBoxPage.cpp">
+      <Filter>Source Files\Pages</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

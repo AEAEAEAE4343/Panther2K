@@ -2,10 +2,12 @@
 
 #include <windows.h>
 
-namespace Gdiplus 
+namespace Gdiplus
 {
+	class Font;
 	class Bitmap;
-}
+	class Graphics;
+};
 
 struct COLOR
 {
@@ -24,6 +26,8 @@ struct DISPLAYCHAR
 	COLOR foreColor;
 };
 
+wchar_t** SplitStringToLines(const wchar_t* string, int maxWidth, int* lineCount);
+
 class Console
 {
 public:
@@ -31,12 +35,11 @@ public:
 
 	static void Init();
 	static Console* CreateConsole();
-	static void LClear();
-	static void LWrite(const wchar_t* string);
-	static void LWriteLine(const wchar_t* string);
 	void Clear();
     void Write(const wchar_t* string);
     void WriteLine(const wchar_t* string);
+	int WriteLinesLeft(const wchar_t* string, int maxWidth);
+	int WriteLinesCentered(const wchar_t* string, int maxWidth);
 	void RedrawImmediately();
 
 	void SetPosition(long x, long y);
@@ -56,6 +59,9 @@ public:
 
 	void (*OnKeyPress)(WPARAM);
 private:
+	/*Gdiplus::Bitmap* bBuf;
+	Gdiplus::Graphics* gBuf;
+	Gdiplus::Font* fBuf;*/
 	HBITMAP hBuf;
 	HDC hdcBuf;
 	bool fullScreen;

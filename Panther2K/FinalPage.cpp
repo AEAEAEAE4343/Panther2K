@@ -11,7 +11,7 @@ void FinalPage::Init()
 	text = L"Panther2K";
 	statusText = L"  ENTER=Restart";
 
-	SetTimer(NULL, NULL, 10000, TimerProc);
+	SetTimer(NULL, NULL, WindowsSetup::RebootTimer, TimerProc);
 }
 
 void FinalPage::Drawer()

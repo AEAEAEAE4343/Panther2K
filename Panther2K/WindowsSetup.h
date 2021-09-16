@@ -6,7 +6,6 @@
 #include <wimgapi.h>
 
 void DoEvents();
-wchar_t** SplitStringToLines(const wchar_t* string, int maxWidth, int* lineCount);
 
 struct ImageInfo
 {
@@ -14,6 +13,8 @@ struct ImageInfo
 	wchar_t* DisplayName;
 	SYSTEMTIME CreationTime;
 };
+
+typedef struct VOLUME_INFO;
 
 static class WindowsSetup
 {
@@ -23,6 +24,8 @@ public:
 
 	static int RunSetup();
 	static void LoadPhase(int phase);
+	static void SelectPartition(int stringIndex, VOLUME_INFO volume);
+	static void SelectNextPartition(int stringIndex, int direction);
 	static void KeyHandler(WPARAM wParam);
 	static void LoadPage(Page* page);
 
@@ -81,6 +84,7 @@ public:
 	static const wchar_t* Partition1Mount;
 	static const wchar_t* Partition2Mount;
 	static const wchar_t* Partition3Mount;
+	static bool AllowOtherFileSystems;
 
 	// Phase 5
 	static bool ShowFileNames;

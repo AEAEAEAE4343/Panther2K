@@ -2,11 +2,13 @@
 #include "WindowsSetup.h"
 #include <iostream>
 #include <process.h>
+#include "MessageBoxPage.h"
 
-#define WM_WIMAPPLYFAILED WM_APP
-#define WM_PROGRESSUPDATE WM_APP + 1
-#define WM_FILENAMEUPDATE WM_APP + 2
+#define WM_PROGRESSUPDATE WM_APP
+#define WM_FILENAMEUPDATE WM_APP + 1
 
+int hResult = 0;
+bool runMessageLoop = true;
 bool canSendProgress = true;
 bool canSendFileName = true;
 int progress = 0;
@@ -33,13 +35,9 @@ void __stdcall WimApplyThread(PDWORD dwThreadId)
 	WIMRegisterMessageCallback(WindowsSetup::WimHandle, (FARPROC)MessageCallback, dwThreadId);
 	HANDLE him = WIMLoadImage(WindowsSetup::WimHandle, WindowsSetup::WimImageIndex);
 	WIMApplyImage(him, WindowsSetup::Partition3Mount, WindowsSetup::ShowFileNames ? WIM_FLAG_FILEINFO : 0);
-	int hresult = GetLastError();
+	hResult = GetLastError();
 	WIMUnregisterMessageCallback(WindowsSetup::WimHandle, (FARPROC)MessageCallback);
-	while (!canSendProgress) {}
-	if (hresult != 0)
-		hresult = PostThreadMessageW(*dwThreadId, WM_WIMAPPLYFAILED, hresult, 0);
-	else
-		hresult = PostThreadMessageW(*dwThreadId, WM_PROGRESSUPDATE, 100, 0);
+	runMessageLoop = true;
 }
 
 void WimApplyPage::WimMessageLoop()
@@ -47,18 +45,16 @@ void WimApplyPage::WimMessageLoop()
 	MSG msg;
 	int progress = 0;
     wchar_t* filename = 0;
-	while (true) 
+	runMessageLoop = true;
+	while (runMessageLoop) 
 	{
 		WaitMessage();
 		progress = 0;
 		filename = 0;
-		while (PeekMessageW(&msg, nullptr, WM_WIMAPPLYFAILED, WM_FILENAMEUPDATE, true))
+		while (PeekMessageW(&msg, nullptr, WM_PROGRESSUPDATE, WM_FILENAMEUPDATE, true))
 		{
 			switch (msg.message)
 			{
-			case WM_WIMAPPLYFAILED:
-				goto end;
-				break;
 			case WM_PROGRESSUPDATE:
 				progress = msg.wParam;
 				break;
@@ -67,9 +63,7 @@ void WimApplyPage::WimMessageLoop()
 				break;
 			}
 		}
-		if (progress == 100)
-			goto end;
-		else if (progress)
+		if (progress)
 			Update(progress);
 		if (filename)
 			Update(filename);
@@ -77,12 +71,22 @@ void WimApplyPage::WimMessageLoop()
 		canSendProgress = true;
 		canSendFileName = true;
 
-		while (PeekMessageW(&msg, nullptr, 0, WM_WIMAPPLYFAILED - 1, true))
+		while (PeekMessageW(&msg, nullptr, 0, WM_APP - 1, true))
 		{
 			TranslateMessage(&msg);
 			DispatchMessageW(&msg);
 		}
+
+		Sleep(25);
 	}
+
+	if (hResult)
+	{
+		MessageBoxPage* msgBox = new MessageBoxPage(L"The installation has failed. WIMApplyImage returned (0x%08x).", true, this);
+		msgBox->ShowDialog();
+		delete msgBox;
+	}
+
 end:
 	return;
 }
@@ -96,7 +100,6 @@ void WimApplyPage::Update(int prog)
 {
 	progress = prog;
 	Redraw();
-	DoEvents();
 }
 
 void WimApplyPage::Update(wchar_t* fileName)
@@ -120,7 +123,6 @@ void WimApplyPage::Update(wchar_t* fileName)
 		swprintf((wchar_t*)statusText, bufferSize, L"  Panther2K is installing Windows...%*s%cCopying: %s", nameX - 36, L"", WindowsSetup::UseCp437 ? L'\xB3' : L'│', filename + (lstrlenW(filename) - WindowsSetup::FileNameLength));
 		Redraw();
 	}
-	DoEvents();
 }
 
 void WimApplyPage::ApplyImage()

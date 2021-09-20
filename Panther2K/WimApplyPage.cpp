@@ -37,7 +37,7 @@ void __stdcall WimApplyThread(PDWORD dwThreadId)
 	WIMApplyImage(him, WindowsSetup::Partition3Mount, WindowsSetup::ShowFileNames ? WIM_FLAG_FILEINFO : 0);
 	hResult = GetLastError();
 	WIMUnregisterMessageCallback(WindowsSetup::WimHandle, (FARPROC)MessageCallback);
-	runMessageLoop = true;
+	runMessageLoop = false;
 }
 
 void WimApplyPage::WimMessageLoop()

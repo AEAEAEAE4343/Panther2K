@@ -105,9 +105,18 @@ void BootPreparationPage::PrepareBootFiles()
 		Draw();
 		DoEvents();
 		swprintf(buffer1, MAX_PATH, L"%sRecovery\\WindowsRE\\", WindowsSetup::Partition2Mount);
-		if (!SHCreateDirectoryExW(NULL, buffer1, NULL))
+		if (retval = SHCreateDirectoryExW(NULL, buffer1, NULL))
 		{
-			swprintf(errorMessage, MAX_PATH, L"Failed to copy recovery image. Could not create the directory (0x%08x).", GetLastError());
+			if (WindowsSetup::ContinueWithoutRecovery)
+			{
+				swprintf(errorMessage, MAX_PATH, L"Failed to copy recovery image. Could not create the directory (0x%08x). Panther2K will continue without setting up Windows Recovery Environment.", retval);
+				MessageBoxPage* msgBox = new MessageBoxPage(errorMessage, false, this);
+				msgBox->ShowDialog();
+				delete msgBox;
+				goto end;
+			}
+
+			swprintf(errorMessage, MAX_PATH, L"Failed to copy recovery image. Could not create the directory (0x%08x).", retval);
 			goto fail;
 		}
 		swprintf(buffer1, MAX_PATH, L"%sRecovery\\WindowsRE\\Winre.wim", WindowsSetup::Partition2Mount);

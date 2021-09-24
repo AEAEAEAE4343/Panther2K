@@ -98,6 +98,7 @@ public:
 private:
 	static bool LoadPartitionFromMount(const wchar_t* buffer, const wchar_t** destVolume, const wchar_t** destMount);
 	static bool LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootPath, const wchar_t* mountPath, const wchar_t** destVolume, const wchar_t** destMount);
+	static bool LocateWimFile(wchar_t* buffer);
 
 	static Console* console;
 	static Page* currentPage;

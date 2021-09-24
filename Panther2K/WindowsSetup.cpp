@@ -78,14 +78,15 @@ void DoEvents()
 	}
 }
 
-bool ParseBool(wchar_t* text)
+bool lstreqW(const wchar_t* string, const wchar_t* comparator)
 {
-	return text[0] == L'Y' && text[1] == L'e' && text[2] == L's' && text[3] == L'\0';
-}
-
-bool ShouldAsk(wchar_t* text)
-{
-	return text[0] == L'A' && text[1] == L's' && text[2] == L'k' && text[3] == L'\0';
+	int len = lstrlenW(comparator);
+	if (lstrlenW(string) != len)
+		return false;
+	for (int i = 0; i < len; i++)
+		if (string[i] != comparator[i])
+			return false;
+	return true;
 }
 
 bool IsSet(DWORD bitfield, int index)
@@ -112,8 +113,8 @@ wchar_t WindowsSetup::GetFirstFreeDrive()
 	const wchar_t* chars = L"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 	DWORD letters = GetLogicalDrives();
 	for (int i = 2; i < 28; i++)
-		if (!IsSet(letters, i % 28))
-			return chars[i % 28];
+		if (!IsSet(letters, i % 26))
+			return chars[i % 26];
 	return L'0';
 }
 
@@ -238,6 +239,40 @@ bool WindowsSetup::LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootP
 	}
 }
 
+bool FileExists(const wchar_t* szPath)
+{
+	DWORD dwAttrib = GetFileAttributes(szPath);
+
+	return (dwAttrib != INVALID_FILE_ATTRIBUTES &&
+		!(dwAttrib & FILE_ATTRIBUTE_DIRECTORY));
+}
+
+bool WindowsSetup::LocateWimFile(wchar_t* buffer)
+{
+	wchar_t pathBuffer[MAX_PATH + 1];
+	const wchar_t* chars = L"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	DWORD letters = GetLogicalDrives();
+	for (int i = 2; i < 28; i++)
+		if (IsSet(letters, i % 26))
+		{
+			memcpy(pathBuffer, L"0:\\sources\\install.wim", sizeof(wchar_t) * 23);
+			pathBuffer[0] = chars[i % 26];
+			if (FileExists(pathBuffer))
+			{
+				memcpy(buffer, pathBuffer, sizeof(wchar_t) * 23);
+				return true;
+			}
+			memcpy(pathBuffer, L"0:\\sources\\install.esd", sizeof(wchar_t) * 23);
+			pathBuffer[0] = chars[i % 26];
+			if (FileExists(pathBuffer))
+			{
+				memcpy(buffer, pathBuffer, sizeof(wchar_t) * 23);
+				return true;
+			}
+		}
+	return false;
+}
+
 COLOR ParseColor(const wchar_t* text, bool* success)
 {
 	unsigned char rgb[3] = { 0 };
@@ -264,15 +299,15 @@ bool WindowsSetup::LoadConfig()
 
 	// Generic 
 	GetPrivateProfileStringW(L"Generic", L"CanGoBack", L"Yes", buffer, 4, INIFile);
-	CanGoBack = ParseBool(buffer);
+	CanGoBack = lstreqW(buffer, L"Yes");
 
 	// Phase 1
 	GetPrivateProfileStringW(L"Phase1", L"SkipWelcome", L"No", buffer, 4, INIFile);
-	SkipPhase1 = ParseBool(buffer);
+	SkipPhase1 = lstreqW(buffer, L"Yes");
 
 	// Phase 2
 	GetPrivateProfileStringW(L"Phase2", L"WimFile", L"Ask", buffer, MAX_PATH, INIFile);
-	if (!ShouldAsk(buffer))
+	if (!lstreqW(buffer, L"Ask"))
 	{
 		SkipPhase2Wim = true;
 		wchar_t* wimPath;
@@ -305,6 +340,36 @@ bool WindowsSetup::LoadConfig()
 		GetWimImageCount();
 		EnumerateImageInfo();
 	}
+	else if (lstreqW(buffer, L"Auto"))
+	{
+		if (!LocateWimFile(buffer))
+		{
+			msgBox = new MessageBoxPage(L"The WIM file could not be found automatically. Please specify the location of the WIM file top use in the config. Panther2K will exit.", true, currentPage);
+			msgBox->ShowDialog();
+			delete msgBox;
+			return false;
+		}
+
+		wchar_t* wimPath = (wchar_t*)malloc(sizeof(wchar_t) * (lstrlenW(buffer) + 1));
+		memcpy(wimPath, buffer, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
+		WimFile = wimPath;
+		if (!LoadWimFile())
+		{
+			msgBox = new MessageBoxPage(L"The WIM file specified in the config could not be loaded. Panther2K will exit.", true, currentPage);
+			msgBox->ShowDialog();
+			delete msgBox;
+			return false;
+		}
+		GetWimImageCount();
+		EnumerateImageInfo();
+	}
+	else
+	{
+		msgBox = new MessageBoxPage(L"The WIM file specified in the config could not be loaded. Panther2K will exit.", true, currentPage);
+		msgBox->ShowDialog();
+		delete msgBox;
+		return false;
+	}
 	if (SkipPhase2Wim)
 	{
 		int index = GetPrivateProfileIntW(L"Phase2", L"WimImageIndex", -1, INIFile);
@@ -325,7 +390,7 @@ bool WindowsSetup::LoadConfig()
 
 	// Phase 3
 	GetPrivateProfileStringW(L"Phase3", L"BootMethod", L"Ask", buffer, MAX_PATH, INIFile);
-	if (!ShouldAsk(buffer))
+	if (!lstreqW(buffer, L"Ask"))
 	{
 		SkipPhase3 = true;
 		if (lstrcmpW(L"UEFI", buffer) == 0)
@@ -345,7 +410,7 @@ bool WindowsSetup::LoadConfig()
 	if (SkipPhase3)
 	{
 		GetPrivateProfileStringW(L"Phase4", L"Partition1", L"Ask", buffer, MAX_PATH, INIFile);
-		if (!ShouldAsk(buffer))
+		if (!lstreqW(buffer, L"Ask"))
 		{
 			SkipPhase4_1 = true;
 			switch (buffer[0])
@@ -367,7 +432,7 @@ bool WindowsSetup::LoadConfig()
 		}
 
 		GetPrivateProfileStringW(L"Phase4", L"Partition3", L"Ask", buffer, MAX_PATH, INIFile);
-		if (!ShouldAsk(buffer))
+		if (!lstreqW(buffer, L"Ask"))
 		{
 			SkipPhase4_3 = true;
 			switch (buffer[0])
@@ -391,7 +456,7 @@ bool WindowsSetup::LoadConfig()
 		if (!UseLegacy)
 		{
 			GetPrivateProfileStringW(L"Phase4", L"Partition2", L"Ask", buffer, MAX_PATH, INIFile);
-			if (!ShouldAsk(buffer))
+			if (!lstreqW(buffer, L"Ask"))
 			{
 				SkipPhase4_2 = true;
 				switch (buffer[0])
@@ -414,15 +479,15 @@ bool WindowsSetup::LoadConfig()
 		}
 	}
 	GetPrivateProfileStringW(L"Phase4", L"AllowOtherFileSystems", L"No", buffer, 4, INIFile);
-	AllowOtherFileSystems = ParseBool(buffer);
+	AllowOtherFileSystems = lstreqW(buffer, L"Yes");
 	
 	// Phase 5
 	GetPrivateProfileStringW(L"Phase5", L"ShowFileNames", L"No", buffer, 4, INIFile);
-	ShowFileNames = ParseBool(buffer);
+	ShowFileNames = lstreqW(buffer, L"Yes");
 
 	// Phase 6
 	GetPrivateProfileStringW(L"Phase6", L"ContinueWithoutRecovery", L"Yes", buffer, 4, INIFile);
-	ContinueWithoutRecovery = ParseBool(buffer);
+	ContinueWithoutRecovery = lstreqW(buffer, L"Yes");
 
 	// Phase 7
 	RebootTimer = GetPrivateProfileIntW(L"Phase7", L"RebootTimer", 10000, INIFile);
@@ -495,7 +560,7 @@ bool WindowsSetup::LoadConfig()
 		return false;
 	}
 	GetPrivateProfileStringW(L"Console", L"FontSmoothing", L"No", buffer, 4, INIFile);
-	bool smooth = ParseBool(buffer);
+	bool smooth = lstreqW(buffer, L"Yes");
 	GetPrivateProfileStringW(L"Console", L"Font", L"Windows Setup", buffer, MAX_PATH, INIFile);
 	HFONT font = CreateFontW(fontHeight, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, smooth ? DEFAULT_QUALITY : NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, buffer);
 	LOGFONTW lf = { 0 };
@@ -508,7 +573,7 @@ bool WindowsSetup::LoadConfig()
 		return false;
 	}
 	GetPrivateProfileStringW(L"Console", L"UseCodePage437", L"Yes", buffer, 4, INIFile);
-	UseCp437 = ParseBool(buffer);
+	UseCp437 = lstreqW(buffer, L"Yes");
 	console->ReloadSettings(columns, rows, font);
 
 	ConfigBackgroundColor = BackgroundColor;

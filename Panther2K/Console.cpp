@@ -590,14 +590,17 @@ LRESULT CALLBACK Console::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lPa
             fullScreen = false;
             SetWindowLongPtrW(hWnd, GWL_STYLE, WS_VISIBLE | WS_CLIPSIBLINGS | WS_OVERLAPPEDWINDOW);
         case VK_HOME:
-            rect = { 0 };
-            GetWindowRect(hWnd, &rect);
-            rect.right = rect.left + (columns * fontWidth);
-            rect.bottom = rect.top + (rows * fontHeight);
-            style = GetWindowLongPtrW(hWnd, GWL_STYLE);
-            exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
-            AdjustWindowRectEx(&rect, style, false, exStyle);
-            SetWindowPos(hWnd, HWND_TOP, 0, 0, rect.right - rect.left, rect.bottom - rect.top, NULL);
+            if (!fullScreen)
+            {
+                rect = { 0 };
+                GetWindowRect(hWnd, &rect);
+                rect.right = rect.left + (columns * fontWidth);
+                rect.bottom = rect.top + (rows * fontHeight);
+                style = GetWindowLongPtrW(hWnd, GWL_STYLE);
+                exStyle = GetWindowLongPtrW(hWnd, GWL_EXSTYLE);
+                AdjustWindowRectEx(&rect, style, false, exStyle);
+                SetWindowPos(hWnd, HWND_TOP, 0, 0, rect.right - rect.left, rect.bottom - rect.top, NULL);
+            }
             break;
         default:
             if (OnKeyPress != 0)

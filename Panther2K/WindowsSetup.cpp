@@ -307,7 +307,31 @@ bool WindowsSetup::LoadConfig()
 
 	// Phase 2
 	GetPrivateProfileStringW(L"Phase2", L"WimFile", L"Ask", buffer, MAX_PATH, INIFile);
-	if (!lstreqW(buffer, L"Ask"))
+	
+	if (lstreqW(buffer, L"Auto"))
+	{
+		if (!LocateWimFile(buffer))
+		{
+			msgBox = new MessageBoxPage(L"The WIM file could not be found automatically. Please specify the location of the WIM file top use in the config. Panther2K will exit.", true, currentPage);
+			msgBox->ShowDialog();
+			delete msgBox;
+			return false;
+		}
+
+		wchar_t* wimPath = (wchar_t*)malloc(sizeof(wchar_t) * (lstrlenW(buffer) + 1));
+		memcpy(wimPath, buffer, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
+		WimFile = wimPath;
+		if (!LoadWimFile())
+		{
+			msgBox = new MessageBoxPage(L"The WIM file specified in the config could not be loaded. Panther2K will exit.", true, currentPage);
+			msgBox->ShowDialog();
+			delete msgBox;
+			return false;
+		}
+		GetWimImageCount();
+		EnumerateImageInfo();
+	}
+	else if (!lstreqW(buffer, L"Ask"))
 	{
 		SkipPhase2Wim = true;
 		wchar_t* wimPath;
@@ -329,29 +353,6 @@ bool WindowsSetup::LoadConfig()
 		}
 		else
 			memcpy(wimPath, buffer, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
-		WimFile = wimPath;
-		if (!LoadWimFile())
-		{
-			msgBox = new MessageBoxPage(L"The WIM file specified in the config could not be loaded. Panther2K will exit.", true, currentPage);
-			msgBox->ShowDialog();
-			delete msgBox;
-			return false;
-		}
-		GetWimImageCount();
-		EnumerateImageInfo();
-	}
-	else if (lstreqW(buffer, L"Auto"))
-	{
-		if (!LocateWimFile(buffer))
-		{
-			msgBox = new MessageBoxPage(L"The WIM file could not be found automatically. Please specify the location of the WIM file top use in the config. Panther2K will exit.", true, currentPage);
-			msgBox->ShowDialog();
-			delete msgBox;
-			return false;
-		}
-
-		wchar_t* wimPath = (wchar_t*)malloc(sizeof(wchar_t) * (lstrlenW(buffer) + 1));
-		memcpy(wimPath, buffer, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
 		WimFile = wimPath;
 		if (!LoadWimFile())
 		{
@@ -503,9 +504,18 @@ bool WindowsSetup::LoadConfig()
 		LightForegroundColor = COLOR{ 255, 255, 255 };
 		DarkForegroundColor = COLOR{ 0, 0, 0 };
 	}
-	else if (!lstrcmpW(buffer, L"BIOS"))
+	else if (!lstrcmpW(buffer, L"BIOS (Blue)"))
 	{
 		BackgroundColor = COLOR{ 0, 0, 170 };
+		ForegroundColor = COLOR{ 170, 170, 170 };
+		ErrorColor = COLOR{ 170, 0, 0 };
+		ProgressBarColor = COLOR{ 255, 255, 0 };
+		LightForegroundColor = COLOR{ 255, 255, 255 };
+		DarkForegroundColor = COLOR{ 0, 0, 0 };
+	}
+	else if (!lstrcmpW(buffer, L"BIOS (Black)"))
+	{
+		BackgroundColor = COLOR{ 0, 0, 0 };
 		ForegroundColor = COLOR{ 170, 170, 170 };
 		ErrorColor = COLOR{ 170, 0, 0 };
 		ProgressBarColor = COLOR{ 255, 255, 0 };
@@ -600,6 +610,7 @@ int WindowsSetup::RunSetup()
 	console = Console::CreateConsole();
 	console->OnKeyPress = KeyHandler;
 	ShowWindow(console->WindowHandle, 4);
+	SendMessage(console->WindowHandle, WM_KEYDOWN, VK_F11, 0);
 
 	// Load config
 	Page* loadPage = new Page();
@@ -655,7 +666,7 @@ void WindowsSetup::LoadPhase(int phase)
 			else
 				WimImageIndex = 1;
 		}
-		if (WimImageCount == -1 || WimImageInfos == NULL)
+		else if (WimImageCount == -1)
 		{
 			// If we skip phase 2, we still need to get the image count and info to display what we're installing
 			GetWimImageCount();
@@ -949,27 +960,22 @@ void WindowsSetup::EnumerateImageInfo()
 	if (pointer == NULL)
 		return;
 
-	for (int i = 1; i <= WimImageCount; i++)
-	{
-		HANDLE hImage = WIMLoadImage(WimHandle, i);
-		if (!hImage)
-		{
-			int d = GetLastError();
-			MessageBox(NULL, L"", L"", MB_OK);
-		}
-		WIMGetImageInformation(hImage, (PVOID *) &str_ptr, (PDWORD) &str_len);
-		str_ptr++;
+	WIMGetImageInformation(WimHandle, (PVOID*)&str_ptr, (PDWORD)&str_len);
+	str_ptr++;
 
-		char* xml = getCharPointer(str_ptr, str_len / 2);
-		int count = strlen(xml);
-		// Parse XML
-		rapidxml::xml_node<>* node;
-		rapidxml::xml_node<>* imageNode;
-		rapidxml::xml_node<>* creationTimeNode;
-		rapidxml::xml_node<>* windowsNode;
-		
-		doc->parse<0>(xml);
-		imageNode = doc->first_node();
+	char* xml = getCharPointer(str_ptr, str_len / 2);
+	int count = strlen(xml);
+	doc->parse<0>(xml);
+
+	// Parse XML
+	rapidxml::xml_node<>* wimNode = doc->first_node();
+	rapidxml::xml_node<>* imageNode = wimNode->first_node("IMAGE");
+	rapidxml::xml_node<>* creationTimeNode;
+	rapidxml::xml_node<>* windowsNode;
+	rapidxml::xml_node<>* node;
+
+	for (int i = 1; i <= WimImageCount; i++, imageNode = imageNode->next_sibling())
+	{
 		creationTimeNode = imageNode->first_node("CREATIONTIME");
 		windowsNode = imageNode->first_node("WINDOWS");
 
@@ -979,7 +985,6 @@ void WindowsSetup::EnumerateImageInfo()
 		if (node == NULL)
 			node = imageNode->first_node("NAME");
 		(pointer + i - 1)->DisplayName = getWcharPointer(node->value());
-		
 
 		wchar_t* end_str;
 		node = creationTimeNode->first_node("HIGHPART");
@@ -990,8 +995,6 @@ void WindowsSetup::EnumerateImageInfo()
 		fTime.dwLowDateTime = wcstoul(creationLow, &end_str, 0);
 		FileTimeToSystemTime(&fTime, &time);
 		(pointer + i - 1)->CreationTime = time;
-
-		WIMCloseHandle(hImage);
 	}
 
 	delete doc;

@@ -18,6 +18,8 @@
 using namespace Gdiplus;
 #pragma comment (lib,"Gdiplus.lib")
 
+#include "Resource.h"
+
 // Config
 bool WindowsSetup::UseCp437 = true;
 bool WindowsSetup::CanGoBack = true;
@@ -561,7 +563,7 @@ bool WindowsSetup::LoadConfig()
 
 	int columns = GetPrivateProfileIntW(L"Console", L"Columns", 80, INIFile);
 	int rows = GetPrivateProfileIntW(L"Console", L"Rows", 25, INIFile);
-	int fontHeight = GetPrivateProfileIntW(L"Console", L"FontHeight", -1, INIFile);
+	int fontHeight = GetPrivateProfileIntW(L"Console", L"FontHeight", 16, INIFile);
 	if (fontHeight == -1)
 	{
 		msgBox = new MessageBoxPage(L"The value Console\\FontHeight specified in the config file is invalid. Panther2K will exit.", true, currentPage);
@@ -571,10 +573,14 @@ bool WindowsSetup::LoadConfig()
 	}
 	GetPrivateProfileStringW(L"Console", L"FontSmoothing", L"No", buffer, 4, INIFile);
 	bool smooth = lstreqW(buffer, L"Yes");
-	GetPrivateProfileStringW(L"Console", L"Font", L"Windows Setup", buffer, MAX_PATH, INIFile);
-	HFONT font = CreateFontW(fontHeight, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, smooth ? DEFAULT_QUALITY : NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, buffer);
+	GetPrivateProfileStringW(L"Console", L"Font", L"Bm437 IBM VGA 8x16", buffer, MAX_PATH, INIFile);
+	HFONT /*font;
+	if (lstreqW(buffer, L"Bm437 IBM VGA 8x16")) font = hf;
+	else*/ font = CreateFontW(fontHeight, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, smooth ? DEFAULT_QUALITY : NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, buffer);
+	
 	LOGFONTW lf = { 0 };
 	GetObjectW(font, sizeof(LOGFONTW), &lf);
+	
 	if (lstrcmpW(buffer, lf.lfFaceName))
 	{
 		msgBox = new MessageBoxPage(L"Loading the font specified in Console\\FontHeight in the config file failed. Panther2K will exit.", true, currentPage);
@@ -582,6 +588,7 @@ bool WindowsSetup::LoadConfig()
 		delete msgBox;
 		return false;
 	}
+	
 	GetPrivateProfileStringW(L"Console", L"UseCodePage437", L"Yes", buffer, 4, INIFile);
 	UseCp437 = lstreqW(buffer, L"Yes");
 	console->ReloadSettings(columns, rows, font);
@@ -604,6 +611,20 @@ int WindowsSetup::RunSetup()
 	GdiplusStartupInput gdiplusStartupInput;
 	ULONG_PTR           gdiplusToken;
 	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+	// Load font
+	HRSRC res = FindResourceW(GetModuleHandle(NULL), MAKEINTRESOURCE(IDR_FONT_IBM), RT_RCDATA);
+	HGLOBAL mem = LoadResource(GetModuleHandle(NULL), res);
+	void* data = LockResource(mem);
+	size_t len = SizeofResource(GetModuleHandle(NULL), res);
+	DWORD nFonts = 0;
+	HANDLE hFontRes = AddFontMemResourceEx(data, len, NULL, &nFonts);
+
+	if (hFontRes == 0)
+	{
+		MessageBoxW(NULL, L"Failed to load font. Panther2K will exit.", L"Panther2K early load", MB_OK | MB_ICONERROR);
+		return false;
+	}
 
 	// Create console
 	Console::Init();

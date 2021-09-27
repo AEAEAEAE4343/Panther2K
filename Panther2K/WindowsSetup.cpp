@@ -306,7 +306,7 @@ bool WindowsSetup::LoadConfig()
 	SkipPhase1 = lstreqW(buffer, L"Yes");
 
 	// Phase 2
-	GetPrivateProfileStringW(L"Phase2", L"WimFile", L"Ask", buffer, MAX_PATH, INIFile);
+	GetPrivateProfileStringW(L"Phase2", L"WimFile", L"Auto", buffer, MAX_PATH, INIFile);
 	
 	if (lstreqW(buffer, L"Auto"))
 	{

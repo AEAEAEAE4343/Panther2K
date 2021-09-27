@@ -1,4 +1,5 @@
-# Panther2K
+![p2knotext.svg](p2knotext.svg)
+---
 
 An advanced installer for Microsoft Windows that mimics the looks of the Windows XP and older installers. Takes any modern (Vista and newer) Windows ISO or WIM file and creates a old styled Windows Setup experience on the go.
 

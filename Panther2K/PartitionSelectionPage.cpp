@@ -2,6 +2,7 @@
 #include "WindowsSetup.h"
 #include "QuitingPage.h"
 #include "wdkpartial.h"
+#include "MessageBoxPage.h"
 
 bool libLoaded = false;
 NtQueryVolumeInformationFileFunction NtQueryVolumeInformationFile;
@@ -42,8 +43,6 @@ PartitionSelectionPage::PartitionSelectionPage(const wchar_t* fileSystem, long l
 		}
 		libLoaded = true;
 	}
-
-	EnumeratePartitions();
 }
 
 void PartitionSelectionPage::EnumeratePartitions()
@@ -101,7 +100,16 @@ void PartitionSelectionPage::EnumeratePartitions()
 		swprintf(diskPath, MAX_PATH, L"\\\\.\\\PHYSICALDRIVE%d", vde->Extents->DiskNumber);
 		diskFileHandle = CreateFileW(diskPath, FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
 		if (diskFileHandle == INVALID_HANDLE_VALUE)
-			goto cleanup;
+		{
+			if (GetLastError() == 5)
+			{
+				MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to enumerate partitions: Access denied. Please re-run Panther2K as Administrator. Panther 2K will exit.", true, this);
+				msgBox->ShowDialog();
+				delete msgBox;
+				PostQuitMessage(0);
+				return;
+			}
+		}
 
 		do
 		{

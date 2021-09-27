@@ -787,7 +787,7 @@ void WindowsSetup::SelectPartition(int stringIndex, VOLUME_INFO volume)
 
 void WindowsSetup::SelectNextPartition(int stringIndex, int direction)
 {
-	Page* page;
+	PartitionSelectionPage* page;
 	int partitionIds[4] = { 3, 1, 1, 2 };
 
 	// Legacy / UEFI overrides
@@ -846,6 +846,7 @@ void WindowsSetup::SelectNextPartition(int stringIndex, int direction)
 	}
 
 	LoadPage(page);
+	page->EnumeratePartitions();
 }
 
 bool waitingForKey = false;

@@ -54,11 +54,23 @@ void PartitionSelectionPage::EnumeratePartitions()
 	wchar_t szNextVolNameNoBSlash[MAX_PATH + 1];
 	wchar_t fileSystemName[MAX_PATH + 1];
 	wchar_t diskPath[MAX_PATH + 1];
+	wchar_t fileBuffer[1024];
+
+#ifdef _DEBUG
+	HANDLE hFile = CreateFileW(L"partitions.txt", GENERIC_ALL, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+#else
+	HANDLE hFile = 0;
+#endif
 
 	volume = FindFirstVolume(szNextVolName, MAX_PATH);
 	success = (volume != INVALID_HANDLE_VALUE);
 	while (success)
 	{
+		swprintf(fileBuffer, 1024,  L"========================================\n");
+		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
+		swprintf(fileBuffer, 1024, L"Volume name: %s\n", szNextVolName);
+		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
+
 		HANDLE volumeFileHandle = 0;
 		HANDLE diskFileHandle = 0;
 		VOLUME_INFO vi = { 0 };
@@ -78,6 +90,9 @@ void PartitionSelectionPage::EnumeratePartitions()
 		if (!GetVolumePathNamesForVolumeNameW(szNextVolName, vi.mountPoint, MAX_PATH + 1, &bytesCopied))
 			goto cleanup;
 
+		swprintf(fileBuffer, 1024, L"Volume path: %s\n", vi.mountPoint);
+		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
+
 		volumeFileHandle = CreateFileW(szNextVolNameNoBSlash, FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
 		if (volumeFileHandle == INVALID_HANDLE_VALUE)
 			goto cleanup;
@@ -85,11 +100,21 @@ void PartitionSelectionPage::EnumeratePartitions()
 			goto cleanup; 
 		vi.totalBytes = (long long)fsi.BytesPerSector * (long long)fsi.SectorsPerAllocationUnit * fsi.TotalAllocationUnits.QuadPart;
 		vi.bytesFree = (long long)fsi.BytesPerSector * (long long)fsi.SectorsPerAllocationUnit * fsi.ActualAvailableAllocationUnits.QuadPart;
+		
+		swprintf(fileBuffer, 1024, L"Volume size (MiB): %I64i\n", vi.totalBytes / 1024 / 1024);
+		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
+
+		swprintf(fileBuffer, 1024, L"Volume free (MiB): %I64i\n", vi.bytesFree / 1024 / 1024);
+		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
+
 		if (vi.bytesFree < requirements.partitionFree || vi.totalBytes < requirements.partitionSize)
 			goto cleanup;
 
 		if (!GetVolumeInformationByHandleW(volumeFileHandle, vi.name, MAX_PATH + 1, NULL, NULL, NULL, fileSystemName, MAX_PATH))
 			goto cleanup;
+
+		swprintf(fileBuffer, 1024, L"Filesystem: %I64i\n", vi.bytesFree / 1024 / 1024);
+		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
 
 		if (lstrcmpW(fileSystemName, requirements.fileSystem) != 0)
 			goto cleanup;
@@ -134,6 +159,11 @@ void PartitionSelectionPage::EnumeratePartitions()
 			{
 				vi.diskNumber = vde->Extents->DiskNumber;
 				vi.partitionNumber = dli->PartitionEntry[i].PartitionNumber;
+
+				swprintf(fileBuffer, 1024, L"Disk number: %i\n", vi.diskNumber);
+				WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
+				swprintf(fileBuffer, 1024, L"Partition number: %i\n", vi.partitionNumber);
+				WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
 			}
 		}
 
@@ -146,6 +176,9 @@ void PartitionSelectionPage::EnumeratePartitions()
 		CloseHandle(volumeFileHandle);
 		success = FindNextVolume(volume, szNextVolName, MAX_PATH) != 0;
 	}
+
+	CloseHandle(hFile);
+	Draw();
 }
 
 VOLUME_INFO PartitionSelectionPage::GetSelectedVolume()

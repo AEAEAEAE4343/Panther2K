@@ -11,7 +11,7 @@ int hResult = 0;
 bool runMessageLoop = true;
 bool canSendProgress = true;
 bool canSendFileName = true;
-int progress = 0;
+unsigned int progress = 0;
 DWORD __stdcall MessageCallback(IN DWORD Msg, IN WPARAM wParam, IN LPARAM lParam, IN PDWORD dwThreadId)
 {
 	switch (Msg)
@@ -127,10 +127,29 @@ void WimApplyPage::Update(wchar_t* fileName)
 
 void WimApplyPage::ApplyImage()
 {
+	DWORD bytesCopied;
+	wchar_t fileBuffer[1024];
+	ULONGLONG ticksBefore = GetTickCount64();
+
 	DWORD dwThreadId = GetCurrentThreadId();
 	CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WimApplyThread, &dwThreadId, 0, 0);
 	//_beginthreadex(NULL, NULL, (_beginthreadex_proc_type)WimApplyThread, &dwThreadId, NULL, NULL);
 	WimMessageLoop();
+
+	ULONGLONG ticksAfter = GetTickCount64();
+	ULONGLONG ticksSpent = ticksAfter - ticksBefore;
+#ifdef _DEBUG
+	HANDLE hFile = CreateFileW(L"installstats.txt", GENERIC_ALL, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	
+	swprintf(fileBuffer, 1024, L"Installed OS: %s\n", WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].DisplayName);
+	WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
+
+	swprintf(fileBuffer, 1024, L"Installation time: %02llum:%02llus\n", (ticksSpent / 1000) / 60, (ticksSpent / 1000) % 60);
+	WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
+
+	swprintf(fileBuffer, 1024, L"Result: 0x%08X\n", hResult);
+	WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
+#endif
 }
 
 void WimApplyPage::Init()

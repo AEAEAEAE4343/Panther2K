@@ -184,23 +184,17 @@ void Console::Clear()
         Point p(r.GetLeft(), r.GetTop());
         PointF p2(r.GetLeft(), r.GetTop());*/
 
-        rect.left = x * fontWidth;
-        rect.top = y * fontHeight;
-        rect.right = rect.left + fontWidth;
-        rect.bottom = rect.top + fontHeight;
-
-        HBRUSH bgBr = CreateSolidBrush(screenBuffer[i].backColor.ToColor());
-        FillRect(hdcBuf, &rect, bgBr);
-        DeleteObject(bgBr);
-
-        //((Graphics*)gBuf)->FillRectangle(&bb, r);
-        //((Graphics*)gBuf)->DrawString(&screenBuffer[i].character, 1, (Font*)fBuf, p2, &bf);
-
-        SetTextColor(hdcBuf, screenBuffer[i].foreColor.ToColor());
-        DrawText(hdcBuf, &screenBuffer[i].character, 1, &rect, DT_LEFT | DT_TOP);
-
         ClearBit(screenBufferUpdateFlags, i);
     }
+
+    rect.left = 0;
+    rect.top = 0;
+    rect.right = fontWidth * columns;
+    rect.bottom = fontHeight * rows;
+
+    HBRUSH bgBr = CreateSolidBrush(backColor.ToColor());
+    FillRect(hdcBuf, &rect, bgBr);
+    DeleteObject(bgBr);
 
     screenBufferUpdated = true;
 

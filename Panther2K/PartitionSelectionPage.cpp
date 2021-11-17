@@ -107,7 +107,7 @@ void PartitionSelectionPage::EnumeratePartitions()
 		swprintf(fileBuffer, 1024, L"Volume free (MiB): %I64i\n", vi.bytesFree / 1024 / 1024);
 		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
 
-		if (vi.bytesFree < requirements.partitionFree || vi.totalBytes < requirements.partitionSize)
+		if (!showAll && !WindowsSetup::AllowSmallVolumes && (vi.bytesFree < requirements.partitionFree || vi.totalBytes < requirements.partitionSize))
 			goto cleanup;
 
 		if (!GetVolumeInformationByHandleW(volumeFileHandle, vi.name, MAX_PATH + 1, NULL, NULL, NULL, fileSystemName, MAX_PATH))
@@ -116,7 +116,7 @@ void PartitionSelectionPage::EnumeratePartitions()
 		swprintf(fileBuffer, 1024, L"Filesystem: %I64i\n", vi.bytesFree / 1024 / 1024);
 		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
 
-		if (lstrcmpW(fileSystemName, requirements.fileSystem) != 0)
+		if (!showAll && !WindowsSetup::AllowOtherFileSystems && lstrcmpW(fileSystemName, requirements.fileSystem) != 0)
 			goto cleanup;
 
 		if (!DeviceIoControl(volumeFileHandle, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, vde, sizeof(VOLUME_DISK_EXTENTS), &bytesCopied, NULL))
@@ -201,7 +201,7 @@ void PartitionSelectionPage::Init()
 	{
 		text = L"Panther2K Setup";
 	}
-	statusText = L"  ENTER=Select  F8=DiskPart  ESC=Back  F3=Quit";
+	statusText = L"  ENTER=Select  F8=DiskPart  F9=Display all  ESC=Back  F3=Quit";
 }
 
 void PartitionSelectionPage::Drawer()
@@ -298,6 +298,10 @@ void PartitionSelectionPage::KeyHandler(WPARAM wParam)
 		break;
 	case VK_F8:
 		system("diskpart");
+		break;
+	case VK_F9:
+		showAll = !showAll;
+		EnumeratePartitions();
 		break;
 	case VK_ESCAPE:
 		WindowsSetup::SelectNextPartition(stringTableIndex, -1);

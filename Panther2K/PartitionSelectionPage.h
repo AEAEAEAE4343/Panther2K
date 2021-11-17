@@ -31,6 +31,7 @@ private:
 	int scrollIndex = 0;
 	std::vector<VOLUME_INFO> volumeInfo;
 	int stringTableIndex;
+	bool showAll = false;
 	struct
 	{
 		int partitionSize;

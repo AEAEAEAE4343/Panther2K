@@ -85,6 +85,7 @@ public:
 	static const wchar_t* Partition2Mount;
 	static const wchar_t* Partition3Mount;
 	static bool AllowOtherFileSystems;
+	static bool AllowSmallVolumes;
 
 	// Phase 5
 	static bool ShowFileNames;

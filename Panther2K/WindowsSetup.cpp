@@ -60,6 +60,7 @@ const wchar_t* WindowsSetup::Partition1Mount = L"";
 const wchar_t* WindowsSetup::Partition2Mount = L"";
 const wchar_t* WindowsSetup::Partition3Mount = L"";
 bool WindowsSetup::AllowOtherFileSystems = true;
+bool WindowsSetup::AllowSmallVolumes = true;
 
 bool WindowsSetup::ShowFileNames = true;
 int WindowsSetup::FileNameLength = 12;
@@ -483,6 +484,9 @@ bool WindowsSetup::LoadConfig()
 	}
 	GetPrivateProfileStringW(L"Phase4", L"AllowOtherFileSystems", L"No", buffer, 4, INIFile);
 	AllowOtherFileSystems = lstreqW(buffer, L"Yes");
+
+	GetPrivateProfileStringW(L"Phase4", L"AllowSmallVolumes", L"No", buffer, 4, INIFile);
+	AllowSmallVolumes = lstreqW(buffer, L"Yes");
 	
 	// Phase 5
 	GetPrivateProfileStringW(L"Phase5", L"ShowFileNames", L"No", buffer, 4, INIFile);

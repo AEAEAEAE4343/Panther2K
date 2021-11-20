@@ -209,20 +209,16 @@ void PartitionSelectionPage::Drawer()
 	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
 	console->SetForegroundColor(WindowsSetup::LightForegroundColor);
 
-	console->SetPosition(3, 4);
-	console->Write(part1Strings[stringTableIndex]);
+	DrawTextLeft(part1Strings[stringTableIndex], console->GetSize().cx - 6, 4);
 
 	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
 	console->SetForegroundColor(WindowsSetup::ForegroundColor);
 
-	console->SetPosition(3, 6);
-	console->WriteLinesLeft(part2Strings[stringTableIndex], console->GetSize().cx - 6);
+	DrawTextLeft(part2Strings[stringTableIndex], console->GetSize().cx - 6, console->GetPosition().y + 2);
 
-	console->SetPosition(3, console->GetPosition().y);
-	console->Write(L"Use the UP and DOWN ARROW keys to select the partition.");
+	DrawTextLeft(L"Use the UP and DOWN ARROW keys to select the partition.", console->GetSize().cx - 6, console->GetPosition().y + 2);
 
-	console->SetPosition(3, console->GetPosition().y + 1);
-	console->Write(L"Press F8 to modify your partition layout using DiskPart.");
+	DrawTextLeft(L"Press F8 to modify your partition layout using DiskPart.", console->GetSize().cx - 6, console->GetPosition().y + 1);
 
 	int boxX = 3;
 	boxY = console->GetPosition().y + 2;

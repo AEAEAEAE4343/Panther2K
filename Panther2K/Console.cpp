@@ -279,39 +279,6 @@ void Console::WriteLine(const wchar_t* string)
     Write(L"\n");
 }
 
-int Console::WriteLinesLeft(const wchar_t* string, int maxWidth)
-{
-    int lineCount = 0;
-    wchar_t** strings = SplitStringToLines(string, maxWidth, &lineCount);
-
-    int x = (columns / 2) - (maxWidth / 2), y = screenPointerY;
-    for (int i = 0; i < lineCount; i++, y++)
-    {
-        SetPosition(x, y);
-        Write(strings[i]);
-    }
-    SetPosition(x, y + 1);
-
-    return lineCount;
-}
-
-int Console::WriteLinesCentered(const wchar_t* string, int maxWidth)
-{
-    int lineCount = 0;
-    wchar_t** strings = SplitStringToLines(string, maxWidth, &lineCount);
-
-    int y = screenPointerY;
-    for (int i = 0; i < lineCount; i++, y++)
-    {
-        int x = (columns / 2) - (lstrlenW(strings[i]) / 2);
-        SetPosition(x, y);
-        Write(strings[i]);
-    }
-    SetPosition((columns / 2) - (maxWidth / 2), y + 1);
-
-    return lineCount;
-}
-
 void Console::RedrawImmediately()
 {
     if (GetCurrentThreadId() != threadId)

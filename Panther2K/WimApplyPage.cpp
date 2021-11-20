@@ -127,7 +127,7 @@ void WimApplyPage::Update(wchar_t* fileName)
 
 void WimApplyPage::ApplyImage()
 {
-	WimMessageLoop();
+	//WimMessageLoop();
 	return;
 
 	DWORD bytesCopied;

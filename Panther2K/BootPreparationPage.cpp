@@ -11,6 +11,9 @@ BootPreparationPage::~BootPreparationPage()
 
 void BootPreparationPage::PrepareBootFiles()
 {
+	while (true)
+		DoEvents();
+
 	wchar_t buffer1[MAX_PATH];
 	wchar_t buffer2[MAX_PATH];
 	wchar_t errorMessage[MAX_PATH];

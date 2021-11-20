@@ -38,8 +38,6 @@ public:
 	void Clear();
     void Write(const wchar_t* string);
     void WriteLine(const wchar_t* string);
-	int WriteLinesLeft(const wchar_t* string, int maxWidth);
-	int WriteLinesCentered(const wchar_t* string, int maxWidth);
 	void RedrawImmediately();
 
 	void SetPosition(long x, long y);

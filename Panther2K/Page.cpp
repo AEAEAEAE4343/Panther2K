@@ -108,6 +108,47 @@ void Page::DrawBox(int boxX, int boxY, int boxWidth, int boxHeight, bool useDoub
 	}
 }
 
+void Page::DrawTextLeft(const wchar_t* string, int cx, int y)
+{
+	int lineCount = 0;
+	wchar_t** lines = SplitStringToLines(string, cx, &lineCount);
+	
+	int x = (console->GetSize().cx - cx) / 2;
+	for (int i = 0; i < lineCount; i++, y++)
+	{
+		console->SetPosition(x, y);
+		console->Write(lines[i]);
+	}
+}
+
+void Page::DrawTextRight(const wchar_t* string, int cx, int y)
+{
+	int lineCount = 0;
+	wchar_t** lines = SplitStringToLines(string, cx, &lineCount);
+
+	int paragraphX = (console->GetSize().cx - cx) / 2;
+	for (int i = 0; i < lineCount; i++, y++)
+	{
+		int x = paragraphX + (cx - lstrlenW(lines[i]));
+		console->SetPosition(x, y);
+		console->Write(lines[i]);
+	}
+}
+
+void Page::DrawTextCenter(const wchar_t* string, int cx, int y)
+{
+	int lineCount = 0;
+	wchar_t** lines = SplitStringToLines(string, cx, &lineCount);
+
+	int paragraphX = (console->GetSize().cx - cx) / 2;
+	for (int i = 0; i < lineCount; i++, y++)
+	{
+		int x = paragraphX + ((cx - lstrlenW(lines[i]) ) / 2);
+		console->SetPosition(x, y);
+		console->Write(lines[i]);
+	}
+}
+
 void Page::AddPopup(PopupPage* popup)
 {
 	page = popup;

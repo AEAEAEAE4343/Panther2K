@@ -7,11 +7,9 @@ void ImageSelectionPage::Init()
 	text = L"Leet's Panther2K Setup";
 	statusText = L"  ENTER=Select  ESC=Back  F3=Quit";
 
-	wchar_t* buffer = (wchar_t*)malloc(sizeof(wchar_t) * 64);
-	if (buffer == 0)
-		return;
+	wchar_t buffer[256];
 
-	::std::array<wchar_t, 64> a;
+	::std::array<wchar_t, 256> a;
 
 	WindowsSetup::EnumerateImageInfo();
 
@@ -35,46 +33,41 @@ void ImageSelectionPage::Init()
 			break;
 		}
 
-		swprintf(buffer, 64, L"%-47s %-6s 00/69/0420", info->DisplayName, arch);
-		memcpy(a.data(), buffer, sizeof(wchar_t) * 64);
+		swprintf(buffer, 256, L"%-*s %-6s %02d/%02d/%04d", console->GetSize().cx - 16 - 18, info->DisplayName, arch, info->CreationTime.wDay, info->CreationTime.wMonth, info->CreationTime.wYear);
+		memcpy(a.data(), buffer, sizeof(wchar_t) * 256);
 		//::std::copy(::std::begin(buffer), ::std::end(buffer), a.begin());
 		//MessageBoxW(console->WindowHandle, a.data(), L"", MB_OK);
 		FormattedStrings.push_back(a);
 	}
-	// Turn ImageInfo into formatted strings (sprintf?)
-	// Later, we can use the index to set the wanted image
-	free(buffer);
 }
 
 void ImageSelectionPage::Drawer()
 {
 	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
 	console->SetForegroundColor(WindowsSetup::LightForegroundColor);
-
 	console->SetPosition(3, 4);
 	console->Write(L"Select the operating system to be installed.");
 
 	console->SetForegroundColor(WindowsSetup::ForegroundColor);
-
-	console->SetPosition(3, 6);
-	console->Write(L"Multiple operating systems were detected inside the WIM or ESD image.\n   Please select the copy of Microsoft(R) Windows(TM) you would like to\n   install onto your computer.\n\n   Use the UP and DOWN arrow keys to select an operating system.");
+	DrawTextLeft(L"Multiple operating systems were detected inside the WIM or ESD image. Please select the copy of Microsoft(R) Windows(TM) you would like to install onto your computer.", console->GetSize().cx - 6, 6);
+	DrawTextLeft(L"Use the UP and DOWN arrow keys to select an operating system.", console->GetSize().cx - 6, console->GetPosition().y + 2);
 
 	SIZE consoleSize = console->GetSize();
-	int boxWidth = consoleSize.cx - 6;
-	int boxHeight = consoleSize.cy - 14;
-	int maxItems = boxHeight - 3;
 	int boxX = 3;
-	int boxY = 12;
+	int boxWidth = consoleSize.cx - 6;
+	boxY = console->GetPosition().y + 2;
+	int boxHeight = consoleSize.cy - boxY - 2;
+	int maxItems = boxHeight - 3;
 	DrawBox(boxX, boxY, boxWidth, boxHeight, false);
 
-	console->SetPosition(8, 13);
-	console->Write(L"Name                                            Arch   Date");
+	DrawTextLeft(L"Name", console->GetSize().cx - 16, boxY + 1);
+	DrawTextRight(L"Arch   Date      ", console->GetSize().cx - 16, boxY + 1);
 }
 
 void ImageSelectionPage::Redrawer()
 {
 	SIZE consoleSize = console->GetSize();
-	int boxHeight = consoleSize.cy - 14;
+	int boxHeight = consoleSize.cy - boxY - 2;
 	int maxItems = boxHeight - 3;
 
 	bool canScrollDown = (scrollIndex + maxItems) < WindowsSetup::WimImageCount;
@@ -98,33 +91,28 @@ void ImageSelectionPage::Redrawer()
 			console->SetBackgroundColor(WindowsSetup::BackgroundColor);
 			console->SetForegroundColor(WindowsSetup::ForegroundColor);
 		}
-		console->SetPosition(8, 14 + i);
+		console->SetPosition(8, boxY + 2 + i);
 		console->Write(text);
 	}
 
 	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
 	console->SetForegroundColor(WindowsSetup::ForegroundColor);
-	if (canScrollDown)
-	{
-		console->SetPosition(74, 21);
-		console->Write(WindowsSetup::UseCp437 ? L"\x19" : L"↓");
-	}
-	if (canScrollUp)
-	{
-		console->SetPosition(74, 14);
-		console->Write(WindowsSetup::UseCp437 ? L"\x18" : L"↑");
-	}
+
+	console->SetPosition(console->GetSize().cx - 6, boxY + boxHeight - 2);
+	if (canScrollDown) console->Write(WindowsSetup::UseCp437 ? L"\x19" : L"↓");
+	else console->Write(L" ");
+	
+	console->SetPosition(console->GetSize().cx - 6, boxY + 2);
+	if (canScrollUp) console->Write(WindowsSetup::UseCp437 ? L"\x18" : L"↑");
+	else console->Write(L" ");
 }
 
 void ImageSelectionPage::KeyHandler(WPARAM wParam)
 {
 	SIZE consoleSize = console->GetSize();
-	int boxWidth = consoleSize.cx - 6;
-	int boxHeight = consoleSize.cy - 14;
+	int boxHeight = consoleSize.cy - boxY - 2;
 	int maxItems = boxHeight - 3;
 	int totalItems = FormattedStrings.size();
-	int boxX = 3;
-	int boxY = 12;
 
 	switch (wParam)
 	{

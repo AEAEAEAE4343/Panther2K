@@ -13,28 +13,23 @@ void WelcomePage::Drawer()
 {
 	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
 	console->SetForegroundColor(WindowsSetup::LightForegroundColor);
-
 	console->SetPosition(3, 4);
 	console->Write(L"Welcome to Panther2K.");
 
 	console->SetForegroundColor(WindowsSetup::ForegroundColor);
-
-	console->SetPosition(3, 6);
-	console->Write(L"The Setup portion of the Panther2K utility prepares Microsoft(R)\n   Windows to run on your computer.");
-
-	console->SetPosition(6, 9);
+	DrawTextLeft(L"The Setup portion of the Panther2K utility prepares Microsoft(R) Windows to run on your computer.", console->GetSize().cx - 6, 6);
+	
+	console->SetPosition(6, console->GetPosition().y + 2);
 	console->Write(WindowsSetup::UseCp437 ? L"\x07" : L"•");
-	console->Write(L"  To launch Setup, press ENTER");
+	DrawTextLeft(L"To launch Setup, press ENTER", console->GetSize().cx - 18, console->GetPosition().y);
 
-	console->SetPosition(6, 11);
+	console->SetPosition(6, console->GetPosition().y + 2);
 	console->Write(WindowsSetup::UseCp437 ? L"\x07" : L"•");
-	console->Write(L"  To repair a Windows installation, press R");
+	DrawTextLeft(L"To repair a Windows installation, press R", console->GetSize().cx - 18, console->GetPosition().y);
 
-	console->SetPosition(6, 13);
+	console->SetPosition(6, console->GetPosition().y + 2);
 	console->Write(WindowsSetup::UseCp437 ? L"\x07" : L"•");
-	console->Write(L"  To quit Panther2K without installing Windows, press F3");
-
-	//console->WriteToConhost();
+	DrawTextLeft(L"To quit Panther2K without installing Windows, press F3", console->GetSize().cx - 18, console->GetPosition().y);
 }
 
 void WelcomePage::Redrawer()

@@ -127,6 +127,9 @@ void WimApplyPage::Update(wchar_t* fileName)
 
 void WimApplyPage::ApplyImage()
 {
+	WimMessageLoop();
+	return;
+
 	DWORD bytesCopied;
 	wchar_t fileBuffer[1024];
 	ULONGLONG ticksBefore = GetTickCount64();

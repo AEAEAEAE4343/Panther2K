@@ -185,14 +185,9 @@ void BootPreparationPage::Drawer()
 	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
 	console->SetForegroundColor(WindowsSetup::ForegroundColor);
 
-	console->SetPosition((cSize.cx / 2) - 18, 6);
-	console->Write(L"Please wait while Setup prepares Windows");
-
-	console->SetPosition((cSize.cx / 2) - 18, 7);
-	console->Write(L"Boot Manager to boot Windows on your computer.");
-
-	console->SetPosition((cSize.cx / 2) - 22, 8);
-	console->Write(L"This shouldn't take more than a minute to complete.");
+	DrawTextCenter(L"Please wait while Setup prepares Windows", cSize.cx, 6);
+	DrawTextCenter(L"Boot Manager to boot Windows on your computer.", cSize.cx, 7);
+	DrawTextCenter(L"This shouldn't take more than a minute to complete.", cSize.cx, 8);
 }
 
 void BootPreparationPage::Redrawer()

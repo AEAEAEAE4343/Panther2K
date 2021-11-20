@@ -267,6 +267,10 @@ void Console::Write(const wchar_t* string)
     free(characters);
 
     screenBufferUpdated = true;
+
+/*#ifdef _DEBUG
+    RedrawImmediately();
+#endif*/
 }
 
 void Console::WriteLine(const wchar_t* string)

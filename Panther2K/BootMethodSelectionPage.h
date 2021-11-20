@@ -8,6 +8,7 @@ public:
 	~BootMethodSelectionPage();
 private:
 	bool legacy = false;
+	int y = 0;
 protected:
 	virtual void Init() override;
 	virtual void Drawer() override;

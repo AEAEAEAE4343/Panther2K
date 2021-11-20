@@ -38,64 +38,53 @@ void BootMethodSelectionPage::Drawer()
 	console->SetPosition(3, 6);
 	console->Write(L"Windows can be set up to boot in two ways:");
 
-	console->SetPosition(6, 8);
+	console->SetForegroundColor(WindowsSetup::ForegroundColor);
+	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
+	y = console->GetPosition().y + 2;
+	console->SetPosition(6, y);
 	console->Write(WindowsSetup::UseCp437 ? L"\x07" : L"•");
-	console->Write(L"  UEFI (Recommended): Modern method of booting. Uses a seperate");
-	console->SetPosition(6, 9);
-	console->Write(L"   partition to store files required for booting the computer.");
-	console->SetPosition(6, 10);
-	console->Write(L"   (Required for Windows 11 and up)");
+	console->SetForegroundColor(legacy ? WindowsSetup::ForegroundColor : WindowsSetup::BackgroundColor);
+	console->SetBackgroundColor(legacy ? WindowsSetup::BackgroundColor : WindowsSetup::ForegroundColor);
+	DrawTextLeft(L"UEFI (Recommended): Modern method of booting. Uses a seperate partition to store files required for booting the computer. (Required for Windows 11 and up)", console->GetSize().cx - 18, console->GetPosition().y);
 
-	console->SetPosition(6, 12);
+	console->SetForegroundColor(WindowsSetup::ForegroundColor);
+	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
+	console->SetPosition(6, console->GetPosition().y + 2);
 	console->Write(WindowsSetup::UseCp437 ? L"\x07" : L"•");
-	console->Write(L"  Legacy/BIOS: Traditional method of booting. Uses the first sector");
-	console->SetPosition(6, 13);
-	console->Write(L"   of your harddrive to store code for loading Windows.");
+	console->SetForegroundColor(legacy ? WindowsSetup::BackgroundColor : WindowsSetup::ForegroundColor);
+	console->SetBackgroundColor(legacy ? WindowsSetup::ForegroundColor : WindowsSetup::BackgroundColor);
+	DrawTextLeft(L"Legacy/BIOS: Traditional method of booting. Uses the first sector of your harddrive to store code for loading Windows.", console->GetSize().cx - 18, console->GetPosition().y);
 
-	console->SetPosition(3, 15);
-	console->Write(L"Use the LEFT and RIGHT arrow keys to select boot method.");
-
-	DrawBox(23, 18, 12, 3, false);
-	DrawBox(43, 18, 14, 3, false);
+	console->SetForegroundColor(WindowsSetup::ForegroundColor);
+	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
+	DrawTextLeft(L"Use the UP and DOWN arrow keys to select boot method.", console->GetSize().cx - 6, console->GetPosition().y + 2);
 }
 
 void BootMethodSelectionPage::Redrawer()
 {
-	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
 	console->SetForegroundColor(WindowsSetup::ForegroundColor);
+	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
+	console->SetPosition(6, y);
+	console->Write(WindowsSetup::UseCp437 ? L"\x07" : L"•");
+	console->SetForegroundColor(legacy ? WindowsSetup::ForegroundColor : WindowsSetup::BackgroundColor);
+	console->SetBackgroundColor(legacy ? WindowsSetup::BackgroundColor : WindowsSetup::ForegroundColor);
+	DrawTextLeft(L"UEFI (Recommended): Modern method of booting. Uses a seperate partition to store files required for booting the computer. (Required for Windows 11 and up)", console->GetSize().cx - 18, console->GetPosition().y);
 
-	if (legacy)
-	{
-		console->SetPosition(27, 19);
-		console->Write(L"UEFI");
-	}
-	else
-	{
-		console->SetPosition(47, 19);
-		console->Write(L"Legacy");
-	}
-
-	console->SetBackgroundColor(WindowsSetup::ForegroundColor);
-	console->SetForegroundColor(WindowsSetup::BackgroundColor);
-
-	if (legacy)
-	{
-		console->SetPosition(47, 19);
-		console->Write(L"Legacy");
-	}
-	else
-	{
-		console->SetPosition(27, 19);
-		console->Write(L"UEFI");
-	}
+	console->SetForegroundColor(WindowsSetup::ForegroundColor);
+	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
+	console->SetPosition(6, console->GetPosition().y + 2);
+	console->Write(WindowsSetup::UseCp437 ? L"\x07" : L"•");
+	console->SetForegroundColor(legacy ? WindowsSetup::BackgroundColor : WindowsSetup::ForegroundColor);
+	console->SetBackgroundColor(legacy ? WindowsSetup::ForegroundColor : WindowsSetup::BackgroundColor);
+	DrawTextLeft(L"Legacy/BIOS: Traditional method of booting. Uses the first sector of your harddrive to store code for loading Windows.", console->GetSize().cx - 18, console->GetPosition().y);
 }
 
 void BootMethodSelectionPage::KeyHandler(WPARAM wParam)
 {
 	switch (wParam)
 	{
-	case VK_LEFT:
-	case VK_RIGHT:
+	case VK_UP:
+	case VK_DOWN:
 		legacy = !legacy;
 		Redraw();
 		break;

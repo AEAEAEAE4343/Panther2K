@@ -14,6 +14,9 @@ public:
 	void AddPopup(PopupPage* popup);
 	void RemovePopup();
 	void DrawBox(int x, int y, int cx, int cy, bool useDouble);
+	void DrawTextLeft(const wchar_t* string, int cx, int y);
+	void DrawTextRight(const wchar_t* string, int cx, int y);
+	void DrawTextCenter(const wchar_t* string, int cx, int y);
 	const wchar_t* text;
 	const wchar_t* statusText;
 	Console* console;

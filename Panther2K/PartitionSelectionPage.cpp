@@ -231,7 +231,7 @@ void PartitionSelectionPage::Drawer()
 	DrawBox(boxX, boxY, boxWidth, boxHeight, true);
 
 	wchar_t* buffer = (wchar_t*)malloc(sizeof(wchar_t) * (boxWidth - 2));
-	swprintf(buffer, boxWidth - 2, L"  Disk  Partition  Volume Name%*sSize (GB)  Mount Point  ", boxWidth - 56, L"");
+	swprintf(buffer, boxWidth - 2, L"   Disk  Partition  Volume Name%*sSize (GB)  Mount Point  ", boxWidth - 58, L"");
 	console->SetPosition(boxX + 1, boxY + 1);
 	console->Write(buffer);
 	free(buffer);
@@ -264,8 +264,8 @@ void PartitionSelectionPage::Redrawer()
 			console->SetForegroundColor(WindowsSetup::ForegroundColor);
 		}
 
-		console->SetPosition(boxX + 3, boxY + i + 2);
-		swprintf(buffer, boxWidth - 2, L"%4d  %-9d  %-*s%10.1F  %-11s", volumeInfo[i].diskNumber, volumeInfo[i].partitionNumber, boxWidth - 46, volumeInfo[i].name, static_cast<float>(volumeInfo[i].totalBytes / 1000) / 1000.0, volumeInfo[i].mountPoint);
+		console->SetPosition(boxX + 4, boxY + i + 2);
+		swprintf(buffer, boxWidth - 2, L"%4d  %-9d  %-*s%10.1F  %-11s", volumeInfo[i].diskNumber, volumeInfo[i].partitionNumber, boxWidth - 48, volumeInfo[i].name, static_cast<float>(volumeInfo[i].totalBytes / 1000) / 1000.0, volumeInfo[i].mountPoint);
 		console->Write(buffer);
 	}
 }

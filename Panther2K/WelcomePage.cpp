@@ -36,7 +36,7 @@ void WelcomePage::Redrawer()
 {
 }
 
-void WelcomePage::KeyHandler(WPARAM wParam)
+bool WelcomePage::KeyHandler(WPARAM wParam)
 {
 	switch (wParam) 
 	{
@@ -52,4 +52,5 @@ void WelcomePage::KeyHandler(WPARAM wParam)
 		AddPopup(new QuitingPage());
 		break;
 	}
+	return true;
 }

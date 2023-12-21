@@ -107,7 +107,7 @@ void ImageSelectionPage::Redrawer()
 	else console->Write(L" ");
 }
 
-void ImageSelectionPage::KeyHandler(WPARAM wParam)
+bool ImageSelectionPage::KeyHandler(WPARAM wParam)
 {
 	SIZE consoleSize = console->GetSize();
 	int boxHeight = consoleSize.cy - boxY - 2;
@@ -141,4 +141,5 @@ void ImageSelectionPage::KeyHandler(WPARAM wParam)
 		WindowsSetup::LoadPhase(1);
 		break;
 	}
+	return true;
 }

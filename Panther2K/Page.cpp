@@ -30,7 +30,7 @@ void Page::Draw()
 	if (page != 0)
 		page->Draw();
 
-	console->RedrawImmediately();
+	//console->RedrawImmediately();
 }
 
 void Page::Redraw(bool redraw)
@@ -55,18 +55,18 @@ void Page::Redraw(bool redraw)
 	console->Write(statusText);
 
 	Redrawer();
-	if (redraw)
-		console->RedrawImmediately();
+	//if (redraw)
+	//	console->RedrawImmediately();
 }
 
-void Page::HandleKey(WPARAM wParam)
+bool Page::HandleKey(WPARAM wParam)
 {
 	if (wParam == VK_F5)
 		Draw();
-	if (page == 0)
-		KeyHandler(wParam);
+	else if (page != 0)
+		return page->HandleKey(wParam);
 	else
-		page->HandleKey(wParam);
+		return KeyHandler(wParam);
 }
 
 void Page::DrawBox(int boxX, int boxY, int boxWidth, int boxHeight, bool useDouble)
@@ -158,7 +158,6 @@ void Page::AddPopup(PopupPage* popup)
 
 void Page::RemovePopup()
 {
-	delete(page);
 	page = 0;
 	Draw();
 }
@@ -175,6 +174,7 @@ void Page::Redrawer()
 {
 }
 
-void Page::KeyHandler(WPARAM wParam)
+bool Page::KeyHandler(WPARAM wParam)
 {
+	return true;
 }

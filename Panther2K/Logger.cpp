@@ -26,5 +26,5 @@ void Logger::WriteLine(const wchar_t* text, const wchar_t* source, const wchar_t
 		Init();
 
 	wchar_t buffer[1024];
-	swprintf(buffer, 1024, L"[%8s]", source);
+	swprintf(buffer, 1024, L"[%8s] %s", source, text);
 }

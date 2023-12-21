@@ -9,19 +9,20 @@
 #include "FinalPage.h"
 #include "MessageBoxPage.h"
 #include "PartitionSelectionPage.h"
+#include "DiskSelectionPage.h"
 
 #include "Logger.h"
 
-#include "shlwapi.h"
-#include "shlobj.h"
 #include "Gdiplus.h"
 using namespace Gdiplus;
 #pragma comment (lib,"Gdiplus.lib")
 
 #include "Resource.h"
+#include "iatpatch.h"
+#include <Shlwapi.h>
 
 // Config
-bool WindowsSetup::UseCp437 = true;
+bool WindowsSetup::UseCp437 = false;
 bool WindowsSetup::CanGoBack = true;
 bool WindowsSetup::SkipPhase1 = false;
 bool WindowsSetup::SkipPhase2Wim = false;
@@ -31,13 +32,13 @@ bool WindowsSetup::SkipPhase4_1 = false;
 bool WindowsSetup::SkipPhase4_2 = false;
 bool WindowsSetup::SkipPhase4_3 = false;
 
-bool WindowsSetup::IsWinPE = true;
-COLOR WindowsSetup::BackgroundColor = COLOR{ 0, 0, 170};
-COLOR WindowsSetup::ForegroundColor = COLOR{ 170, 170, 170 };
-COLOR WindowsSetup::ErrorColor = COLOR{ 170, 0, 0 };
-COLOR WindowsSetup::ProgressBarColor = COLOR{ 255, 255, 0 };
-COLOR WindowsSetup::LightForegroundColor = COLOR{ 255, 255, 255 };
-COLOR WindowsSetup::DarkForegroundColor = COLOR{ 0, 0, 0 };
+bool WindowsSetup::IsWinPE = false;
+int WindowsSetup::BackgroundColor = 0;
+int WindowsSetup::ForegroundColor = 1;
+int WindowsSetup::ErrorColor = 2;
+int WindowsSetup::ProgressBarColor = 3;
+int WindowsSetup::LightForegroundColor = 4;
+int WindowsSetup::DarkForegroundColor = 5;
 COLOR WindowsSetup::ConfigBackgroundColor = COLOR{ 0, 0, 170 };
 COLOR WindowsSetup::ConfigForegroundColor = COLOR{ 170, 170, 170 };
 COLOR WindowsSetup::ConfigErrorColor = COLOR{ 170, 0, 0 };
@@ -52,25 +53,25 @@ ImageInfo* WindowsSetup::WimImageInfos = 0;
 int WindowsSetup::WimImageIndex = 0;
 
 bool WindowsSetup::UseLegacy = false;
-
 const wchar_t* WindowsSetup::Partition1Volume = L"";
 const wchar_t* WindowsSetup::Partition2Volume = L"";
 const wchar_t* WindowsSetup::Partition3Volume = L"";
 const wchar_t* WindowsSetup::Partition1Mount = L"";
 const wchar_t* WindowsSetup::Partition2Mount = L"";
 const wchar_t* WindowsSetup::Partition3Mount = L"";
+bool WindowsSetup::UseRecovery = true;
 bool WindowsSetup::AllowOtherFileSystems = true;
 bool WindowsSetup::AllowSmallVolumes = true;
-
 bool WindowsSetup::ShowFileNames = true;
 int WindowsSetup::FileNameLength = 12;
-
 bool WindowsSetup::ContinueWithoutRecovery = true;
-
 int WindowsSetup::RebootTimer = 10000;
 
 Console* WindowsSetup::console = 0;
 Page* WindowsSetup::currentPage = 0;
+
+bool isPartedLoaded = false;
+
 void DoEvents()
 {
 	MSG msg;
@@ -191,13 +192,6 @@ bool WindowsSetup::LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootP
 	if (WindowsSetup::IsWinPE)
 	{
 		wchar_t* mountPoint = (wchar_t*)malloc(sizeof(wchar_t) * 4);
-		if (!mountPoint)
-		{
-			MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to allocate memory through malloc(). Panther2K will exit.", true, currentPage);
-			msgBox->ShowDialog();
-			delete msgBox;
-			return false;
-		}
 		mountPoint[0] = WindowsSetup::GetFirstFreeDrive();
 		if (mountPoint[0] == L'0')
 		{
@@ -220,16 +214,18 @@ bool WindowsSetup::LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootP
 	else
 	{
 		*destMount = ConCatW(rootPath, mountPath);
-		c = SHCreateDirectoryExW(NULL, *destMount, NULL);
-		if (c != 0 &&
-			c != ERROR_FILE_EXISTS &&
-			c != ERROR_ALREADY_EXISTS)
+		c = CreateDirectory(*destMount, NULL);
+		if (c == 0) 
 		{
-			swprintf(buffer, MAX_PATH, L"Creating mount directory for partition failed (0x%08x). Panther2K will exit.", c);
-			MessageBoxPage* msgBox = new MessageBoxPage(buffer, true, currentPage);
-			msgBox->ShowDialog();
-			delete msgBox;
-			return false;
+			c = GetLastError();
+			if (c != ERROR_ALREADY_EXISTS)
+			{
+				swprintf(buffer, MAX_PATH, L"Creating mount directory for partition failed (0x%08x). Panther2K will exit.", c);
+				MessageBoxPage* msgBox = new MessageBoxPage(buffer, true, currentPage);
+				msgBox->ShowDialog();
+				delete msgBox;
+				return false;
+			}
 		}
 		if (!SetVolumeMountPointW(*destMount, *destVolume))
 		{
@@ -294,9 +290,9 @@ bool WindowsSetup::LoadConfig()
 	MessageBoxPage* msgBox = 0;
 
 	_wgetcwd(rootCwdPath, MAX_PATH);
-	PathStripToRootW(rootCwdPath);
+	PathStripToRoot(rootCwdPath);
 	GetModuleFileNameW(NULL, rootFilePath, MAX_PATH);
-	PathStripToRootW(rootFilePath);
+	PathStripToRoot(rootFilePath);
 
 	GetFullPathNameW(L"panther.ini", MAX_PATH, INIFile, NULL);
 
@@ -315,7 +311,7 @@ bool WindowsSetup::LoadConfig()
 	{
 		if (!LocateWimFile(buffer))
 		{
-			msgBox = new MessageBoxPage(L"The WIM file could not be found automatically. Please specify the location of the WIM file top use in the config. Panther2K will exit.", true, currentPage);
+			msgBox = new MessageBoxPage(L"The WIM file could not be found automatically. Please specify the location of the WIM file to use in the config. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
 			delete msgBox;
 			return false;
@@ -411,6 +407,8 @@ bool WindowsSetup::LoadConfig()
 	}
 
 	// Phase 4
+	GetPrivateProfileStringW(L"Phase4", L"UseRecovery", L"Yes", buffer, MAX_PATH, INIFile);
+	UseRecovery = lstreqW(buffer, L"Yes");
 	if (SkipPhase3)
 	{
 		GetPrivateProfileStringW(L"Phase4", L"Partition1", L"Ask", buffer, MAX_PATH, INIFile);
@@ -457,7 +455,7 @@ bool WindowsSetup::LoadConfig()
 			}
 		}
 
-		if (!UseLegacy)
+		if (!UseLegacy && UseRecovery)
 		{
 			GetPrivateProfileStringW(L"Phase4", L"Partition2", L"Ask", buffer, MAX_PATH, INIFile);
 			if (!lstreqW(buffer, L"Ask"))
@@ -489,7 +487,7 @@ bool WindowsSetup::LoadConfig()
 	AllowSmallVolumes = lstreqW(buffer, L"Yes");
 	
 	// Phase 5
-	GetPrivateProfileStringW(L"Phase5", L"ShowFileNames", L"No", buffer, 4, INIFile);
+	GetPrivateProfileStringW(L"Phase5", L"ShowFileNames", L"Yes", buffer, 4, INIFile);
 	ShowFileNames = lstreqW(buffer, L"Yes");
 
 	// Phase 6
@@ -503,30 +501,30 @@ bool WindowsSetup::LoadConfig()
 	GetPrivateProfileStringW(L"Console", L"ColorScheme", L"Windows Setup", buffer, MAX_PATH, INIFile);
 	if (!lstrcmpW(buffer, L"Windows Setup"))
 	{
-		BackgroundColor = COLOR{ 0, 0, 168 };
-		ForegroundColor = COLOR{ 168, 168, 168 };
-		ErrorColor = COLOR{ 168, 0, 0 };
-		ProgressBarColor = COLOR{ 255, 255, 0 };
-		LightForegroundColor = COLOR{ 255, 255, 255 };
-		DarkForegroundColor = COLOR{ 0, 0, 0 };
+		ConfigBackgroundColor = COLOR{ 0, 0, 168 };
+		ConfigForegroundColor = COLOR{ 168, 168, 168 };
+		ConfigErrorColor = COLOR{ 168, 0, 0 };
+		ConfigProgressBarColor = COLOR{ 255, 255, 0 };
+		ConfigLightForegroundColor = COLOR{ 255, 255, 255 };
+		ConfigDarkForegroundColor = COLOR{ 0, 0, 0 };
 	}
 	else if (!lstrcmpW(buffer, L"BIOS (Blue)"))
 	{
-		BackgroundColor = COLOR{ 0, 0, 170 };
-		ForegroundColor = COLOR{ 170, 170, 170 };
-		ErrorColor = COLOR{ 170, 0, 0 };
-		ProgressBarColor = COLOR{ 255, 255, 0 };
-		LightForegroundColor = COLOR{ 255, 255, 255 };
-		DarkForegroundColor = COLOR{ 0, 0, 0 };
+		ConfigBackgroundColor = COLOR{ 0, 0, 170 };
+		ConfigForegroundColor = COLOR{ 170, 170, 170 };
+		ConfigErrorColor = COLOR{ 170, 0, 0 };
+		ConfigProgressBarColor = COLOR{ 255, 255, 0 };
+		ConfigLightForegroundColor = COLOR{ 255, 255, 255 };
+		ConfigDarkForegroundColor = COLOR{ 0, 0, 0 };
 	}
 	else if (!lstrcmpW(buffer, L"BIOS (Black)"))
 	{
-		BackgroundColor = COLOR{ 0, 0, 0 };
-		ForegroundColor = COLOR{ 170, 170, 170 };
-		ErrorColor = COLOR{ 170, 0, 0 };
-		ProgressBarColor = COLOR{ 255, 255, 0 };
-		LightForegroundColor = COLOR{ 255, 255, 255 };
-		DarkForegroundColor = COLOR{ 0, 0, 0 };
+		ConfigBackgroundColor = COLOR{ 0, 0, 0 };
+		ConfigForegroundColor = COLOR{ 170, 170, 170 };
+		ConfigErrorColor = COLOR{ 170, 0, 0 };
+		ConfigProgressBarColor = COLOR{ 255, 255, 0 };
+		ConfigLightForegroundColor = COLOR{ 255, 255, 255 };
+		ConfigDarkForegroundColor = COLOR{ 0, 0, 0 };
 	}
 	else if (!lstrcmpW(buffer, L"Custom"))
 	{
@@ -539,22 +537,22 @@ bool WindowsSetup::LoadConfig()
 	parse:
 		bool success = false;
 		GetPrivateProfileStringW(L"Console", L"BackgroundColor", L"Fail", buffer, MAX_PATH, INIFile);
-		BackgroundColor = ParseColor(buffer, &success);
+		ConfigBackgroundColor = ParseColor(buffer, &success);
 		if (!success) goto fail;
 		GetPrivateProfileStringW(L"Console", L"ForegroundColor", L"Fail", buffer, MAX_PATH, INIFile);
-		ForegroundColor = ParseColor(buffer, &success);
+		ConfigForegroundColor = ParseColor(buffer, &success);
 		if (!success) goto fail;
 		GetPrivateProfileStringW(L"Console", L"ErrorColor", L"Fail", buffer, MAX_PATH, INIFile);
-		ErrorColor = ParseColor(buffer, &success);
+		ConfigErrorColor = ParseColor(buffer, &success);
 		if (!success) goto fail;
 		GetPrivateProfileStringW(L"Console", L"ProgressBarColor", L"Fail", buffer, MAX_PATH, INIFile);
-		ProgressBarColor = ParseColor(buffer, &success);
+		ConfigProgressBarColor = ParseColor(buffer, &success);
 		if (!success) goto fail;
 		GetPrivateProfileStringW(L"Console", L"LightForegroundColor", L"Fail", buffer, MAX_PATH, INIFile);
-		LightForegroundColor = ParseColor(buffer, &success);
+		ConfigLightForegroundColor = ParseColor(buffer, &success);
 		if (!success) goto fail;
 		GetPrivateProfileStringW(L"Console", L"DarkForegroundColor", L"Fail", buffer, MAX_PATH, INIFile);
-		DarkForegroundColor = ParseColor(buffer, &success);
+		ConfigDarkForegroundColor = ParseColor(buffer, &success);
 		if (!success) goto fail;
 	}
 	else
@@ -578,9 +576,7 @@ bool WindowsSetup::LoadConfig()
 	GetPrivateProfileStringW(L"Console", L"FontSmoothing", L"No", buffer, 4, INIFile);
 	bool smooth = lstreqW(buffer, L"Yes");
 	GetPrivateProfileStringW(L"Console", L"Font", L"Bm437 IBM VGA 8x16", buffer, MAX_PATH, INIFile);
-	HFONT /*font;
-	if (lstreqW(buffer, L"Bm437 IBM VGA 8x16")) font = hf;
-	else*/ font = CreateFontW(fontHeight, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, smooth ? DEFAULT_QUALITY : NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, buffer);
+	HFONT font = CreateFontW(fontHeight, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, smooth ? DEFAULT_QUALITY : NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, buffer);
 	
 	LOGFONTW lf = { 0 };
 	GetObjectW(font, sizeof(LOGFONTW), &lf);
@@ -593,23 +589,88 @@ bool WindowsSetup::LoadConfig()
 		return false;
 	}
 	
-	GetPrivateProfileStringW(L"Console", L"UseCodePage437", L"Yes", buffer, 4, INIFile);
+	GetPrivateProfileStringW(L"Console", L"UseCodePage437", L"No", buffer, 4, INIFile);
 	UseCp437 = lstreqW(buffer, L"Yes");
-	console->ReloadSettings(columns, rows, font);
-
-	ConfigBackgroundColor = BackgroundColor;
-	ConfigForegroundColor = ForegroundColor;
-	ConfigErrorColor = ErrorColor;
-	ConfigProgressBarColor = ProgressBarColor;
-	ConfigLightForegroundColor = LightForegroundColor;
-	ConfigDarkForegroundColor = DarkForegroundColor;
 
 	return true;
+}
+
+int WindowsSetup::RunPartitionManager() 
+{
+	// Try loading WinParted
+	typedef int (*RunWinParted)(Console*);
+	typedef void (*InitializeCRT)();
+	typedef HRESULT (*ApplyP2KLayoutToDiskGPT)(Console*, int);
+
+	auto winParted = LoadLibraryA("WinParted.exe");
+
+	if (!isPartedLoaded)
+	{
+		ParseIAT(winParted);
+		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, (LPCSTR)2);
+		initializeCRT();
+	}
+
+	auto runWinParted = (RunWinParted)GetProcAddress(winParted, (LPCSTR)3);
+	runWinParted(console);
+
+	currentPage->Draw();
+
+	isPartedLoaded = true;
+	return 0;
+}
+
+void WindowsSetup::LoadDrivers()
+{
+	wchar_t commandBuffer[MAX_PATH + 25];
+	WIN32_FIND_DATAW ffd;
+	DWORD dwAttrib = GetFileAttributesW(L".\\drivers");
+
+	if (!(dwAttrib != INVALID_FILE_ATTRIBUTES &&
+		(dwAttrib & FILE_ATTRIBUTE_DIRECTORY)))
+		return;
+
+	HANDLE hFind = FindFirstFileW(L".\\drivers\\*", &ffd);
+	int lastError = GetLastError();
+
+	if (hFind != INVALID_HANDLE_VALUE)
+	{
+		do
+		{
+			wchar_t* dot = wcsrchr(ffd.cFileName, L'.');
+			if (dot && !wcscmp(dot, L".inf") && !(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+			{
+				swprintf_s(commandBuffer, MAX_PATH + 25, L"drvload.exe .\\drivers\\%s", ffd.cFileName);
+				int ret = _wsystem(commandBuffer);
+				if (ret) 
+				{
+					wchar_t buffer[MAX_PATH * 2];
+					swprintf_s(buffer, MAX_PATH * 2, L"An error occured while loading driver %s. Panther2K will start, but a device required for installation might not be available.", ffd.cFileName);
+					MessageBoxPage* msgBox = new MessageBoxPage(buffer, false, currentPage);
+					msgBox->ShowDialog();
+					delete msgBox;
+					continue;
+				}
+			}
+
+		} while (FindNextFile(hFind, &ffd) != 0);
+		FindClose(hFind);
+	}
+	else
+	{
+		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occured while enumerating available drivers. Panther2K will start, but a device required for installation might not be available.", false, currentPage);
+		msgBox->ShowDialog();
+		delete msgBox;
+	}
 }
 
 int WindowsSetup::RunSetup()
 {
 	MSG msg;
+
+#ifdef DEBUG
+	AllocConsole();
+#endif
 
 	// Initialize GDI+.
 	GdiplusStartupInput gdiplusStartupInput;
@@ -617,10 +678,10 @@ int WindowsSetup::RunSetup()
 	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
 	// Load font
-	HRSRC res = FindResourceW(GetModuleHandle(NULL), MAKEINTRESOURCE(IDR_FONT_IBM), RT_RCDATA);
-	HGLOBAL mem = LoadResource(GetModuleHandle(NULL), res);
+	HRSRC res = FindResourceW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(IDR_FONT_IBM), RT_RCDATA);
+	HGLOBAL mem = LoadResource(GetModuleHandleW(NULL), res);
 	void* data = LockResource(mem);
-	size_t len = SizeofResource(GetModuleHandle(NULL), res);
+	size_t len = SizeofResource(GetModuleHandleW(NULL), res);
 	DWORD nFonts = 0;
 	HANDLE hFontRes = AddFontMemResourceEx(data, len, NULL, &nFonts);
 
@@ -629,37 +690,53 @@ int WindowsSetup::RunSetup()
 		MessageBoxW(NULL, L"Failed to load font. Panther2K will exit.", L"Panther2K early load", MB_OK | MB_ICONERROR);
 		return false;
 	}
+	AllocConsole();
 
-	// Create console
-	Console::Init();
-	console = Console::CreateConsole();
-	console->OnKeyPress = KeyHandler;
-	ShowWindow(console->WindowHandle, 4);
-	SendMessage(console->WindowHandle, WM_KEYDOWN, VK_F11, 0);
+	console = new CustomConsole();
+	console->Init();
+	ShowWindow(((CustomConsole*)console)->WindowHandle, SW_SHOW);
+	SendMessage(((CustomConsole*)console)->WindowHandle, WM_KEYDOWN, VK_F11, 0);
 
-	// Load config
 	Page* loadPage = new Page();
 	LoadPage(loadPage);
 	loadPage->text = L"Panther2K";
-	loadPage->statusText = L"  Windows is starting Panther2K";
-	loadPage->Draw();
 
+	KeyHandler(VK_F7);
+	KeyHandler(VK_NUMPAD0);
+
+	// Load PE drivers
+	if (IsWinPE) 
+	{
+		loadPage->statusText = L"  Windows is loading drivers...";
+		loadPage->Draw();
+		LoadDrivers();
+	}
+
+	// Load config
+	loadPage->statusText = L"  Windows is starting Panther2K...";
+	loadPage->Draw();
 	DoEvents();
 	if (!LoadConfig())
-		return (0b11 << 30) || (FACILITY_WIN32 << 16) || (ERROR_INVALID_PARAMETER); /* 0b11 (Error) + FACILITY_WIN32 + ERROR_INVALID_PARAMETER */
+		return ERROR_INVALID_PARAMETER;
+
+	// TEMPORARY: code page 437 is unsupported currently
+	// WinPE is unsupported currently
+	UseCp437 = false;
+	IsWinPE = false;
 
 	// Start welcome phase
 	LoadPhase(1);
 
-	// Main message loop:
-	while (GetMessageW(&msg, nullptr, 0, 0))
-	{
-		TranslateMessage(&msg);
-		DispatchMessageW(&msg);
+	// Run console loop
+	for (KEY_EVENT_RECORD* record = console->Read();
+		!record->bKeyDown || KeyHandler(record->wVirtualKeyCode);
+		record = console->Read()) {
+		free(record);
 	}
 
+	// Stop GDI+
 	GdiplusShutdown(gdiplusToken);
-	return (int)msg.wParam;
+	return 0;
 }
 
 void WindowsSetup::LoadPhase(int phase)
@@ -704,23 +781,13 @@ void WindowsSetup::LoadPhase(int phase)
 			break;
 		}
 	case 4:
-		SelectNextPartition(-1, 1);
-		return;
+		page = new DiskSelectionPage();
+		break;
 		// TODO: Find out what partitions the user wants to install to
 		//if (!SkipPhase4_1)
 		//{
 	case 5:
 		// Apply the image
-		// 
-		// Doing this is going to produce the following call stack:
-		//   Console::WndProc (WM_KEYDOWN from Phase 4 (or earlier))
-		//   LoadPhase (5)
-		//   WimApplyPage::ApplyImage 
-		//   WimApplyPage::WimMessageLoop
-		// 
-		// Only when the applying of the image finishes will the WM_KEYDOWN message return
-		// If you are reading this, I need help figuring out what the fuck to do here.
-		//  - Leet
 		page = new WimApplyPage();
 		LoadPage(page);
 		((WimApplyPage*)page)->ApplyImage();
@@ -729,6 +796,20 @@ void WindowsSetup::LoadPhase(int phase)
 		page = new BootPreparationPage();
 		LoadPage(page);
 		((BootPreparationPage*)page)->PrepareBootFiles();
+		// Doing this is going to produce the following call stack:
+		//   
+		//   WindowsSetup::RunSetup()
+		//	 WindowsSetup::KeyHandler(VK_RETURN)
+		//   PartitionSelectionPage::HandleKey(VK_RETURN)
+		//   WindowsSetup::SelectNextPartition(3)
+		//   WindowsSetup::LoadPhase(5)
+		//   (fall through to case label 6)
+		//   BootPreparationPage::PrepareBootFiles()
+		// 
+		// Only when the creation of the boot files finishes will the execution return to the normal
+		// loop. If you are reading this, I need help figuring out how to keep the stack restricted
+		// to a single page instead of this misery.
+		//  - Leet
 	case 7:
 		// Finalize installation
 		page = new FinalPage();
@@ -741,9 +822,74 @@ void WindowsSetup::LoadPhase(int phase)
 	LoadPage(page);
 }
 
+bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
+{
+	// Try loading WinParted
+	typedef int (*RunWinParted)(Console*);
+	typedef void (*InitializeCRT)();
+	typedef HRESULT(*ApplyP2KLayoutToDiskGPT)(Console*, int, bool, wchar_t***);
+
+	auto winParted = LoadLibraryA("WinParted.exe");
+
+	if (!isPartedLoaded)
+	{
+		ParseIAT(winParted);
+		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, (LPCSTR)2);
+		initializeCRT();
+		isPartedLoaded = true;
+	}
+	
+	wchar_t** mountPoints = (wchar_t**)malloc(sizeof(wchar_t*) * 3);
+	for (int i = 0; i < 3; i++)
+		mountPoints[i] = (wchar_t*)malloc(sizeof(wchar_t) * MAX_PATH);
+
+	auto applyLayout = (ApplyP2KLayoutToDiskGPT)GetProcAddress(winParted, (LPCSTR)1);
+	HRESULT res = applyLayout(console, diskNumber, IsWinPE, &mountPoints);
+
+	if (res != ERROR_SUCCESS)
+	{
+		wchar_t displayMessage[MAX_PATH * 2];
+		wchar_t errorMessage[MAX_PATH];
+		FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, res, NULL, errorMessage, MAX_PATH, NULL);
+		swprintf_s(displayMessage, L"An error occured while preparing the disk. %s", errorMessage);
+
+		MessageBoxPage* msgBox = new MessageBoxPage(displayMessage, false, currentPage);
+		msgBox->ShowDialog();
+		delete msgBox;
+
+		currentPage->Draw();
+		return false;
+	}
+	else 
+	{
+		// System
+		if (lstrlenW(mountPoints[0]) == 1)
+		{
+			wcscat_s(mountPoints[0], MAX_PATH, L":\\");
+		}
+		Partition1Mount = mountPoints[0];
+
+		// Recovery
+		if (lstrlenW(mountPoints[2]) == 1)
+		{
+			wcscat_s(mountPoints[2], MAX_PATH, L":\\");
+		}
+	    Partition2Mount = mountPoints[2];
+
+		// Windows
+		if (lstrlenW(mountPoints[1]) == 1)
+		{
+			wcscat_s(mountPoints[1], MAX_PATH, L":\\");
+		}
+		Partition3Mount = mountPoints[1];
+
+		currentPage->Draw();
+		return true;
+	}
+}
+
 void WindowsSetup::SelectPartition(int stringIndex, VOLUME_INFO volume)
 {
-	int partitionIds[4] = { 3, 1, 1, 2 };
 	wchar_t buffer[MAX_PATH + 1];
 	wchar_t rootPath[MAX_PATH + 1];
 
@@ -753,22 +899,23 @@ void WindowsSetup::SelectPartition(int stringIndex, VOLUME_INFO volume)
 	const wchar_t** targetVolume;
 	const wchar_t** targetMount;
 	const wchar_t* mount;
-	switch (partitionIds[stringIndex])
+	switch (stringIndex)
 	{
+	case 0:
+		targetVolume = &Partition3Volume;
+		targetMount = &Partition3Mount;
+		mount = L"$Panther2K\\Win\\";
+		break;
 	case 1:
+	case 2:
 		targetVolume = &Partition1Volume;
 		targetMount = &Partition1Mount;
 		mount = L"$Panther2K\\Sys\\";
 		break;
-	case 2:
+	case 3:
 		targetVolume = &Partition2Volume;
 		targetMount = &Partition2Mount;
 		mount = L"$Panther2K\\Rec\\";
-		break;
-	case 3:
-		targetVolume = &Partition3Volume;
-		targetMount = &Partition3Mount;
-		mount = L"$Panther2K\\Win\\";
 		break;
 	default:
 		return;
@@ -789,62 +936,43 @@ void WindowsSetup::SelectPartition(int stringIndex, VOLUME_INFO volume)
 		lstrcpyW((LPWSTR)*targetMount, volume.mountPoint);
 }
 
-void WindowsSetup::SelectNextPartition(int stringIndex, int direction)
+void WindowsSetup::SelectNextPartition(int index)
 {
 	PartitionSelectionPage* page;
-	int partitionIds[4] = { 3, 1, 1, 2 };
-
-	// Legacy / UEFI overrides
-	int nextPage = stringIndex + direction;
-	if (nextPage == 1 && UseLegacy)
-		nextPage += direction;
-	else if (nextPage == 2 && !UseLegacy)
-		nextPage += direction;
-	else if (nextPage == 3 && UseLegacy)
-		nextPage += direction;
-	
-	// Config overrides
-	if (partitionIds[nextPage] == 1 && SkipPhase4_1)
-		nextPage += direction;
-	else if (partitionIds[nextPage] == 2 && SkipPhase4_2)
-		nextPage += direction;
-	else if (partitionIds[nextPage] == 3 && SkipPhase4_3)
-		nextPage += direction;
-
-	// Navigate out of Phase 4
-	if (nextPage == -1)
+	switch (index)
 	{
+	case -1:
 		LoadPhase(3);
 		return;
-	}
-	else if (nextPage == 4)
-	{
+	case 0:
+		if (!SkipPhase4_3)
+		{
+			// Windows files (Phase 4_3)
+			// NTFS partition at least as big as the size of the WIM + the installed size
+			// For now it is set to at least 500MB
+			page = new PartitionSelectionPage(L"NTFS", 500000000, 0, 0, 0);
+			break;
+		}
+	case 1:
+		if (!SkipPhase4_1)
+		{
+			// ESP or System Reserved (Phase 4_1)
+			// FAT32 partition with 40MB free space for ESP
+			// NTFS partition with 40MB free space for System Reserved
+			page = new PartitionSelectionPage(L"FAT32", 0, 40000000,UseLegacy ? 2 : 1, 1);
+			break;
+		}
+	case 2:
+		if (!SkipPhase4_2 && UseRecovery && !UseLegacy)
+		{
+			// Recovery (Phase 4_2)
+			// 500MB NTFS partition 
+			page = new PartitionSelectionPage(L"NTFS", 500000000, 0, 3, 2);
+			break;
+		}
+	case 3:
 		LoadPhase(5);
 		return;
-	}
-
-	// If there were overrides, re-evaluate everything
-	if (nextPage != stringIndex + direction)
-	{
-		nextPage -= direction;
-		SelectNextPartition(nextPage, direction);
-		return;
-	}
-
-	switch (nextPage)
-	{
-	case 0:
-		page = new PartitionSelectionPage(L"NTFS", 0, 0, 0); 
-		break;
-	case 1:
-		page = new PartitionSelectionPage(L"FAT32", 0, 40000000, 1);
-		break;
-	case 2:
-		page = new PartitionSelectionPage(L"NTFS", 500000000, 0, 2);
-		break;
-	case 3:
-		page = new PartitionSelectionPage(L"NTFS", 500000000, 0, 3);
-		break;
 	default:
 		return;
 	}
@@ -856,44 +984,60 @@ void WindowsSetup::SelectNextPartition(int stringIndex, int direction)
 bool waitingForKey = false;
 const wchar_t* oldStatus = 0;
 Page* oldPage = 0;
-void WindowsSetup::KeyHandler(WPARAM wParam)
+bool WindowsSetup::KeyHandler(WPARAM wParam)
 {
 	if (waitingForKey)
 	{
 		switch (wParam)
 		{
 		case VK_NUMPAD0:
-			BackgroundColor = ConfigBackgroundColor;
-			ForegroundColor = ConfigForegroundColor;
-			ErrorColor = ConfigErrorColor;
-			ProgressBarColor = ConfigProgressBarColor;
-			LightForegroundColor = ConfigLightForegroundColor;
-			DarkForegroundColor = ConfigDarkForegroundColor;
+		{
+			COLOR* colorTable = (COLOR*)malloc(sizeof(COLOR) * 6);
+			colorTable[BackgroundColor] = ConfigBackgroundColor;
+			colorTable[ForegroundColor] = ConfigForegroundColor;
+			colorTable[ErrorColor] = ConfigErrorColor;
+			colorTable[ProgressBarColor] = ConfigProgressBarColor;
+			colorTable[LightForegroundColor] = ConfigLightForegroundColor;
+			colorTable[DarkForegroundColor] = ConfigDarkForegroundColor;
+			console->SetColorTable(colorTable, 6);
 			break;
+		}
 		case VK_NUMPAD1:
-			BackgroundColor = COLOR{ 0, 0, 170 };
-			ForegroundColor = COLOR{ 170, 170, 170 };
-			ErrorColor = COLOR{ 170, 0, 0 };
-			ProgressBarColor = COLOR{ 255, 255, 0 };
-			LightForegroundColor = COLOR{ 255, 255, 255 };
-			DarkForegroundColor = COLOR{ 0, 0, 0 };
+		{
+			COLOR* colorTable = (COLOR*)malloc(sizeof(COLOR) * 6);
+			colorTable[BackgroundColor] = COLOR{ 0, 0, 170 };
+			colorTable[ForegroundColor] = COLOR{ 170, 170, 170 };
+			colorTable[ErrorColor] = COLOR{ 170, 0, 0 };
+			colorTable[ProgressBarColor] = COLOR{ 255, 255, 0 };
+			colorTable[LightForegroundColor] = COLOR{ 255, 255, 255 };
+			colorTable[DarkForegroundColor] = COLOR{ 0, 0, 0 };
+			console->SetColorTable(colorTable, 6);
 			break;
+		}
 		case VK_NUMPAD2:
-			BackgroundColor = COLOR{ 0, 0, 168 };
-			ForegroundColor = COLOR{ 168, 168, 168 };
-			ErrorColor = COLOR{ 168, 0, 0 };
-			ProgressBarColor = COLOR{ 255, 255, 0 };
-			LightForegroundColor = COLOR{ 255, 255, 255 };
-			DarkForegroundColor = COLOR{ 0, 0, 0 };
+		{
+			COLOR* colorTable = (COLOR*)malloc(sizeof(COLOR) * 6);
+			colorTable[BackgroundColor] = COLOR{ 0, 0, 168 };
+			colorTable[ForegroundColor] = COLOR{ 168, 168, 168 };
+			colorTable[ErrorColor] = COLOR{ 168, 0, 0 };
+			colorTable[ProgressBarColor] = COLOR{ 255, 255, 0 };
+			colorTable[LightForegroundColor] = COLOR{ 255, 255, 255 };
+			colorTable[DarkForegroundColor] = COLOR{ 0, 0, 0 };
+			console->SetColorTable(colorTable, 6);
 			break;
+		}
 		case VK_NUMPAD3:
-			BackgroundColor = COLOR{ 0, 0, 0 };
-			ForegroundColor = COLOR{ 170, 170, 170 };
-			ErrorColor = COLOR{ 170, 0, 0 };
-			ProgressBarColor = COLOR{ 255, 255, 0 };
-			LightForegroundColor = COLOR{ 255, 255, 255 };
-			DarkForegroundColor = COLOR{ 0, 0, 0 };
-			break;
+		{
+			COLOR* colorTable = (COLOR*)malloc(sizeof(COLOR) * 6);
+			colorTable[BackgroundColor] = COLOR{ 0, 0, 0 };
+			colorTable[ForegroundColor] = COLOR{ 170, 170, 170 };
+			colorTable[ErrorColor] = COLOR{ 170, 0, 0 };
+			colorTable[ProgressBarColor] = COLOR{ 255, 255, 0 };
+			colorTable[LightForegroundColor] = COLOR{ 255, 255, 255 };
+			colorTable[DarkForegroundColor] = COLOR{ 0, 0, 0 };
+			console->SetColorTable(colorTable, 6);
+			break; 
+		}
 		}
 		if (oldPage == currentPage)
 		{
@@ -901,6 +1045,7 @@ void WindowsSetup::KeyHandler(WPARAM wParam)
 			currentPage->Draw();
 		}
 		waitingForKey = false;
+		return true;
 	}
 	else if (wParam == VK_F7)
 	{
@@ -909,9 +1054,10 @@ void WindowsSetup::KeyHandler(WPARAM wParam)
 		currentPage->statusText = L"  NUM0=Default  NUM1=BIOS (Blue)  NUM2=Windows Setup  NUM3=BIOS (Dark)";
 		currentPage->Draw();
 		waitingForKey = true;
+		return true;
 	}
 	else
-		currentPage->HandleKey(wParam);
+		return currentPage->HandleKey(wParam);
 }
 
 void WindowsSetup::LoadPage(Page* page)

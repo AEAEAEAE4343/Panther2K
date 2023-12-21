@@ -35,10 +35,7 @@ void FinalPage::Redrawer()
 {
 }
 
-void FinalPage::KeyHandler(WPARAM wParam)
+bool FinalPage::KeyHandler(WPARAM wParam)
 {
-	if (wParam == VK_RETURN)
-	{
-		PostQuitMessage(0);
-	}
+	return wParam != VK_RETURN;
 }

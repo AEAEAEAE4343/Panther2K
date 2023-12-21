@@ -6,25 +6,78 @@
 
 #define WM_PROGRESSUPDATE WM_APP
 #define WM_FILENAMEUPDATE WM_APP + 1
+#define WM_FINISHUPDATE WM_APP + 2
 
 int hResult = 0;
 bool runMessageLoop = true;
 bool canSendProgress = true;
 bool canSendFileName = true;
 unsigned int progress = 0;
+HANDLE hFileLog;
+
+void WriteToFile(const wchar_t* string) 
+{
+	DWORD bytes;
+	if (!hFileLog)
+	{
+		wchar_t buffer[MAX_PATH];
+		swprintf_s(buffer, L"%s%s", WindowsSetup::Partition3Mount, L"panther2k.log");
+		hFileLog = CreateFileW(buffer, GENERIC_ALL, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+		if (!hFileLog) return;
+	}
+
+	WriteFile(hFileLog, string, lstrlenW(string) * sizeof(wchar_t), &bytes, NULL);
+}
+
 DWORD __stdcall MessageCallback(IN DWORD Msg, IN WPARAM wParam, IN LPARAM lParam, IN PDWORD dwThreadId)
 {
+	wchar_t buffer[MAX_PATH * 2];
 	switch (Msg)
 	{
 	case WIM_MSG_PROGRESS:
-		if (canSendProgress)
-			if (PostThreadMessageW(*dwThreadId, WM_PROGRESSUPDATE, wParam, 0))
-				canSendProgress = false;
+		swprintf_s(buffer, L"Progress: %lld%%\n", wParam);
+		WriteToFile(buffer);
+		PostThreadMessageW(*dwThreadId, WM_PROGRESSUPDATE, wParam, 0);
 		break;
 	case WIM_MSG_PROCESS:
 		if (WindowsSetup::ShowFileNames && canSendFileName)
-			if (PostThreadMessageW(*dwThreadId, WM_FILENAMEUPDATE, wParam, 0))
+			if (PostThreadMessageW(*dwThreadId, WM_FILENAMEUPDATE, wParam, lParam))
 				canSendFileName = false;
+		break;
+	case WIM_MSG_INFO:
+	case WIM_MSG_ERROR:
+	case WIM_MSG_WARNING:
+	{
+		FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, lParam, NULL, buffer, MAX_PATH, NULL);
+		WriteToFile(L"File ");
+		WriteToFile((wchar_t*)wParam);
+		WriteToFile(L": ");
+		WriteToFile(buffer);
+		WriteToFile(L"\n");
+		break;
+	}
+	case WIM_MSG_TEXT:
+		swprintf_s(buffer, L"%s\n", (wchar_t*)lParam);
+		WriteToFile(buffer);
+		break;
+	case WIM_MSG_SETRANGE:
+		swprintf_s(buffer, L"Total number of files to be applied: %lld\n", lParam);
+		WriteToFile(buffer);
+		break;
+	case WIM_MSG_SETPOS:
+		swprintf_s(buffer, L"Number of files applied: %lld\n", lParam);
+		WriteToFile(buffer);
+		break;
+	case WIM_MSG_QUERY_ABORT:
+		WriteToFile(L"Abort opportunity given, but not aborting\n");
+		break;
+	case WIM_MSG_METADATA_EXCLUDE:
+	case WIM_MSG_STEPIT:
+	case WIM_MSG_STEPNAME:
+		break;
+	default:
+		swprintf_s(buffer, L"Unknown message: %d\n", Msg);
+		WriteToFile(buffer);
 		break;
 	}
 	return WIM_MSG_SUCCESS;
@@ -34,10 +87,11 @@ void __stdcall WimApplyThread(PDWORD dwThreadId)
 {
 	WIMRegisterMessageCallback(WindowsSetup::WimHandle, (FARPROC)MessageCallback, dwThreadId);
 	HANDLE him = WIMLoadImage(WindowsSetup::WimHandle, WindowsSetup::WimImageIndex);
-	WIMApplyImage(him, WindowsSetup::Partition3Mount, WindowsSetup::ShowFileNames ? WIM_FLAG_FILEINFO : 0);
+	BOOL result = WIMApplyImage(him, WindowsSetup::Partition3Mount, WIM_FLAG_INDEX);
 	hResult = GetLastError();
 	WIMUnregisterMessageCallback(WindowsSetup::WimHandle, (FARPROC)MessageCallback);
 	runMessageLoop = false;
+	PostThreadMessageW(*dwThreadId, WM_FINISHUPDATE, 0, 0);
 }
 
 void WimApplyPage::WimMessageLoop()
@@ -46,45 +100,34 @@ void WimApplyPage::WimMessageLoop()
 	int progress = 0;
     wchar_t* filename = 0;
 	runMessageLoop = true;
-	while (runMessageLoop) 
+
+	while (GetMessageW(&msg, nullptr, WM_PROGRESSUPDATE, WM_FINISHUPDATE) && runMessageLoop)
 	{
-		WaitMessage();
-		progress = 0;
-		filename = 0;
-		while (PeekMessageW(&msg, nullptr, WM_PROGRESSUPDATE, WM_FILENAMEUPDATE, true))
+		switch (msg.message)
 		{
-			switch (msg.message)
-			{
-			case WM_PROGRESSUPDATE:
-				progress = msg.wParam;
-				break;
-			case WM_FILENAMEUPDATE:
-				filename = (wchar_t*)msg.wParam;
-				break;
-			}
-		}
-		if (progress)
-			Update(progress);
-		if (filename)
-			Update(filename);
-
-		canSendProgress = true;
-		canSendFileName = true;
-
-		while (PeekMessageW(&msg, nullptr, 0, WM_APP - 1, true))
-		{
-			TranslateMessage(&msg);
-			DispatchMessageW(&msg);
+		case WM_PROGRESSUPDATE:
+			Update(msg.wParam);
+			break;
+		case WM_FILENAMEUPDATE:
+			Update((wchar_t*)msg.wParam);
+			break;
+		case WM_FINISHUPDATE:
+			runMessageLoop = false;
+			break;
 		}
 
+		TranslateMessage(&msg);
+		DispatchMessageW(&msg);
 		Sleep(25);
+		canSendFileName = true;
 	}
 
 	if (hResult)
 	{
-		MessageBoxPage* msgBox = new MessageBoxPage(L"The installation has failed. WIMApplyImage returned (0x%08x).", true, this);
+		MessageBoxPage* msgBox = new MessageBoxPage(L"The installation has failed. See the installation log for more details.", true, this);
 		msgBox->ShowDialog();
 		delete msgBox;
+		exit(hResult);
 	}
 
 end:
@@ -102,27 +145,45 @@ void WimApplyPage::Update(int prog)
 	Redraw();
 }
 
+LPTSTR PathFindFileName(
+	LPTSTR pPath)
+{
+	LPTSTR pT;
+
+	for (pT = pPath; *pPath; pPath++) {
+		if ((pPath[0] == TEXT('\\') || pPath[0] == TEXT(':') || pPath[0] == TEXT('/'))
+			&& pPath[1] && pPath[1] != TEXT('\\') && pPath[1] != TEXT('/'))
+			pT = pPath + 1;
+	}
+
+	return pT;
+}
+
 void WimApplyPage::Update(wchar_t* fileName)
 {
+	int length = console->GetSize().cx;
+	int bufferSize = length + 1;
+	int nameX = length - 25;
+	/// | Copying: 12345678.123  
+
+	wmemset((wchar_t*)statusText, L' ', bufferSize);
+	wmemcpy_s((wchar_t*)statusText, bufferSize, L"  Panther2K is installing Windows...", 36);
+
 	if (fileName)
 	{
-		int length = console->GetSize().cx;
-		int bufferSize = length + 1;
-		int nameX = length - (12 + WindowsSetup::FileNameLength);
-
-		if (!filename)
-		{
-			wchar_t* buffer = (wchar_t*)malloc(sizeof(wchar_t) * bufferSize);
-			if (!buffer)
-				return; 
-			statusText = buffer;
-		}
-		
-		filename = fileName;
-
-		swprintf((wchar_t*)statusText, bufferSize, L"  Panther2K is installing Windows...%*s%cCopying: %s", nameX - 36, L"", WindowsSetup::UseCp437 ? L'\xB3' : L'│', filename + (lstrlenW(filename) - WindowsSetup::FileNameLength));
-		Redraw();
+		wchar_t buffer[24];
+		fileName = PathFindFileName(fileName);
+		swprintf_s(buffer, L"│ Copying: %.12s", fileName + (lstrlenW(fileName) - 12));
+		wmemcpy_s((wchar_t*)statusText + nameX, bufferSize - nameX, buffer, 24);
 	}
+	else 
+	{
+		((wchar_t*)statusText)[36] = L'\x0';
+	}
+
+	((wchar_t*)statusText)[length] = L'\x0';
+	_ASSERT(lstrlenW(statusText) <= length);
+	Redraw();
 }
 
 void WimApplyPage::ApplyImage()
@@ -131,25 +192,18 @@ void WimApplyPage::ApplyImage()
 	wchar_t fileBuffer[1024];
 	ULONGLONG ticksBefore = GetTickCount64();
 
+	swprintf_s(fileBuffer, L"Starting installation of %s\n", WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].DisplayName);
+	WriteToFile(fileBuffer);
+
 	DWORD dwThreadId = GetCurrentThreadId();
 	CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WimApplyThread, &dwThreadId, 0, 0);
-	//_beginthreadex(NULL, NULL, (_beginthreadex_proc_type)WimApplyThread, &dwThreadId, NULL, NULL);
 	WimMessageLoop();
 
 	ULONGLONG ticksAfter = GetTickCount64();
 	ULONGLONG ticksSpent = ticksAfter - ticksBefore;
-#ifdef _DEBUG
-	HANDLE hFile = CreateFileW(L"installstats.txt", GENERIC_ALL, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	
-	swprintf(fileBuffer, 1024, L"Installed OS: %s\n", WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].DisplayName);
-	WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-
-	swprintf(fileBuffer, 1024, L"Installation time: %02llum:%02llus\n", (ticksSpent / 1000) / 60, (ticksSpent / 1000) % 60);
-	WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-
-	swprintf(fileBuffer, 1024, L"Result: 0x%08X\n", hResult);
-	WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-#endif
+	swprintf_s(fileBuffer, L"The installation has finished.\nInstallation time: %02llum:%02llus\nResult: 0x%08X\n", (ticksSpent / 1000) / 60, (ticksSpent / 1000) % 60, hResult);
+	WriteToFile(fileBuffer);
 }
 
 void WimApplyPage::Init()
@@ -167,7 +221,8 @@ void WimApplyPage::Init()
 	{
 		text = L"Panther2K Setup";
 	}
-	statusText = L"  Panther2K is installing Windows...";
+	statusText = (wchar_t*)malloc(sizeof(wchar_t) * (console->GetSize().cx + 1));
+	memcpy(((wchar_t*)statusText), L"  Panther2K is installing Windows...", 37 * sizeof(wchar_t));
 }
 
 void WimApplyPage::Drawer()
@@ -177,14 +232,7 @@ void WimApplyPage::Drawer()
 	console->SetBackgroundColor(WindowsSetup::BackgroundColor);
 	console->SetForegroundColor(WindowsSetup::ForegroundColor);
 
-	console->SetPosition((consoleSize.cx / 2) - 18, 6);
-	console->Write(L"Please wait while Setup copies files");
-
-	console->SetPosition((consoleSize.cx / 2) - 18, 7);
-	console->Write(L"to the Windows installation folders.");
-
-	console->SetPosition((consoleSize.cx / 2) - 22, 8);
-	console->Write(L"This might take several minutes to complete.");
+	console->DrawTextCenter(L"Please wait while Setup copies files to the Windows installation folders. This might take several minutes to complete.", consoleSize.cx / 3 * 2, 6);
 	
 	int boxWidth = consoleSize.cx - 12;
 	int boxHeight = 7;
@@ -229,6 +277,7 @@ void WimApplyPage::Redrawer()
 		console->Write(L" ");
 }
 
-void WimApplyPage::KeyHandler(WPARAM wParam)
+bool WimApplyPage::KeyHandler(WPARAM wParam)
 {
+	return true;
 }

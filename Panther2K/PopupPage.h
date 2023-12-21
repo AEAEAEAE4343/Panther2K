@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Console.h"
+#include <PantherConsole.h>
 
 class Page;
 
@@ -9,15 +9,15 @@ class PopupPage
 public:
 	void Initialize(Console* con, Page* par);
 	void Draw();
-	void HandleKey(WPARAM wParam);
+	bool HandleKey(WPARAM wParam);
 	Page* parent;
 private:
 	virtual void Init();
 	virtual void Drawer();
-	virtual void KeyHandler(WPARAM wParam);
+	virtual bool KeyHandler(WPARAM wParam);
 protected:
 	bool customColor = false;
-	COLOR fore, back;
+	int fore, back;
 	int width, height;
 	const wchar_t* statusText;
 	Console* console;

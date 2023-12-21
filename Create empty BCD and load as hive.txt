@@ -1,0 +1,18 @@
+Create empty BCD and load as hive
+Load template BCD as hive as well
+
+Copy {dbgsettings} to new BCD
+Copy {emssettings} to new BCD
+Copy {badmemory} to new BCD
+Copy {globalsettings} to new BCD
+Copy {resumeloadersettings} to new BCD
+Copy {hypervisorsettings} to new BCD
+Copy {bootloadersettings} to new BCD
+
+Copy OS loader template and Bootmgr template and resume loader template without disrupting GUID structure, also add appropriate information
+
+
+Template GUIDs:
+OS Loader UEFI: {b012b84d-c47c-4ed5-b722-c0c42163e569} (GUID_WINDOWS_OS_TARGET_TEMPLATE_EFI)
+OS Loader PCAT: {a1943bbc-ea85-487c-97c7-c9ede908a38a} (GUID_WINDOWS_OS_TARGET_TEMPLATE_PCAT)
+Global settings: {7ea2e1ac-2e61-4728-aaa3-896d9d0a9f0e}

@@ -22,12 +22,13 @@ const wchar_t* const part2Strings[] =
 	L"Panther2K will use this partition to store the files required for booting into the Windows Recovery Environment (WinRE). WinRE can be used whenever Windows fails to load, for example due to an incompatible driver update."
 };
 
-PartitionSelectionPage::PartitionSelectionPage(const wchar_t* fileSystem, long long minimumSize, long long minimumBytesAvailable, int stringIndex)
+PartitionSelectionPage::PartitionSelectionPage(const wchar_t* fileSystem, long long minimumSize, long long minimumBytesAvailable, int stringIndex, int displayIndex)
 {
 	requirements.fileSystem = fileSystem;
 	requirements.partitionSize = minimumSize;
 	requirements.partitionFree = minimumBytesAvailable;
 	stringTableIndex = stringIndex;
+	dispIndex = displayIndex;
 
 	if (!libLoaded)
 	{
@@ -128,7 +129,7 @@ void PartitionSelectionPage::EnumeratePartitions()
 		{
 			if (GetLastError() == 5)
 			{
-				MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to enumerate partitions: Access denied. Please re-run Panther2K as Administrator. Panther 2K will exit.", true, this);
+				MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to enumerate partitions: Access denied. Please re-run Panther2K as Administrator. Panther2K will exit.", true, this);
 				msgBox->ShowDialog();
 				delete msgBox;
 				PostQuitMessage(0);
@@ -264,9 +265,10 @@ void PartitionSelectionPage::Redrawer()
 		swprintf(buffer, boxWidth - 2, L"%4d  %-9d  %-*s%10.1F  %-11s", volumeInfo[i].diskNumber, volumeInfo[i].partitionNumber, boxWidth - 48, volumeInfo[i].name, static_cast<float>(volumeInfo[i].totalBytes / 1000) / 1000.0, volumeInfo[i].mountPoint);
 		console->Write(buffer);
 	}
+	free(buffer);
 }
 
-void PartitionSelectionPage::KeyHandler(WPARAM wParam)
+bool PartitionSelectionPage::KeyHandler(WPARAM wParam)
 {
 	int boxX = 3;
 	int boxWidth = console->GetSize().cx - 6;
@@ -293,18 +295,19 @@ void PartitionSelectionPage::KeyHandler(WPARAM wParam)
 		AddPopup(new QuitingPage());
 		break;
 	case VK_F8:
-		system("diskpart");
+		WindowsSetup::RunPartitionManager();
 		break;
 	case VK_F9:
 		showAll = !showAll;
 		EnumeratePartitions();
 		break;
 	case VK_ESCAPE:
-		WindowsSetup::SelectNextPartition(stringTableIndex, -1);
+		WindowsSetup::SelectNextPartition(dispIndex - 1);
 		break;
 	case VK_RETURN:
 		WindowsSetup::SelectPartition(stringTableIndex, GetSelectedVolume());
-		WindowsSetup::SelectNextPartition(stringTableIndex, 1);
+		WindowsSetup::SelectNextPartition(dispIndex + 1);
 		break;
 	}
+	return true;
 }

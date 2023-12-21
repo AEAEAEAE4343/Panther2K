@@ -15,13 +15,13 @@ void MessageBoxPage::ShowDialog()
 {
 	MSG msg;
 	parent->AddPopup(this);
-	shown = true;
-	while (shown)
-	{
-		GetMessageW(&msg, NULL, NULL, NULL);
-		TranslateMessage(&msg);
-		DispatchMessageW(&msg);
+
+	for (KEY_EVENT_RECORD* record = console->Read();
+		!record->bKeyDown || HandleKey(record->wVirtualKeyCode);
+		record = console->Read()) {
 	}
+
+	parent->RemovePopup();
 }
 
 void MessageBoxPage::Init()
@@ -59,8 +59,9 @@ void MessageBoxPage::Drawer()
 	}
 }
 
-void MessageBoxPage::KeyHandler(WPARAM wParam)
+bool MessageBoxPage::KeyHandler(WPARAM wParam)
 {
 	if (wParam == VK_RETURN)
-		shown = false;
+		return false;
+	return true;
 }

@@ -39,7 +39,7 @@ void QuitingPage::Drawer()
 	console->Write(L" To quit Setup, press F3.");
 }
 
-void QuitingPage::KeyHandler(WPARAM wParam)
+bool QuitingPage::KeyHandler(WPARAM wParam)
 {
 	switch (wParam)
 	{
@@ -47,7 +47,7 @@ void QuitingPage::KeyHandler(WPARAM wParam)
 		parent->RemovePopup();
 		break;
 	case VK_F3:
-		PostQuitMessage(ERROR_CANCELLED);
-		break;
+		return false;
 	}
+	return true;
 }

@@ -79,7 +79,7 @@ void BootMethodSelectionPage::Redrawer()
 	DrawTextLeft(L"Legacy/BIOS: Traditional method of booting. Uses the first sector of your harddrive to store code for loading Windows.", console->GetSize().cx - 18, console->GetPosition().y);
 }
 
-void BootMethodSelectionPage::KeyHandler(WPARAM wParam)
+bool BootMethodSelectionPage::KeyHandler(WPARAM wParam)
 {
 	switch (wParam)
 	{
@@ -99,4 +99,5 @@ void BootMethodSelectionPage::KeyHandler(WPARAM wParam)
 		AddPopup(new QuitingPage());
 		break;
 	}
+	return true;
 }

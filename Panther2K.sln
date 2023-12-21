@@ -1,9 +1,16 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.31410.223
+# Visual Studio Version 17
+VisualStudioVersion = 17.1.32210.238
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Panther2K", "Panther2K\Panther2K.vcxproj", "{87BBE52A-F355-4BC7-8D09-DAC1E48B3753}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E999838A-4F2D-4748-A038-39E2BDB49722} = {E999838A-4F2D-4748-A038-39E2BDB49722}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "WinParted", "WinParted\WinParted.vcxproj", "{E999838A-4F2D-4748-A038-39E2BDB49722}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "P2KConsole", "P2KConsole\P2KConsole.vcxproj", "{A3DD51CE-63AB-4189-9D8A-3111288A3463}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +28,22 @@ Global
 		{87BBE52A-F355-4BC7-8D09-DAC1E48B3753}.Release|x64.Build.0 = Release|x64
 		{87BBE52A-F355-4BC7-8D09-DAC1E48B3753}.Release|x86.ActiveCfg = Release|Win32
 		{87BBE52A-F355-4BC7-8D09-DAC1E48B3753}.Release|x86.Build.0 = Release|Win32
+		{E999838A-4F2D-4748-A038-39E2BDB49722}.Debug|x64.ActiveCfg = Debug|x64
+		{E999838A-4F2D-4748-A038-39E2BDB49722}.Debug|x64.Build.0 = Debug|x64
+		{E999838A-4F2D-4748-A038-39E2BDB49722}.Debug|x86.ActiveCfg = Debug|Win32
+		{E999838A-4F2D-4748-A038-39E2BDB49722}.Debug|x86.Build.0 = Debug|Win32
+		{E999838A-4F2D-4748-A038-39E2BDB49722}.Release|x64.ActiveCfg = Release|x64
+		{E999838A-4F2D-4748-A038-39E2BDB49722}.Release|x64.Build.0 = Release|x64
+		{E999838A-4F2D-4748-A038-39E2BDB49722}.Release|x86.ActiveCfg = Release|Win32
+		{E999838A-4F2D-4748-A038-39E2BDB49722}.Release|x86.Build.0 = Release|Win32
+		{A3DD51CE-63AB-4189-9D8A-3111288A3463}.Debug|x64.ActiveCfg = Debug|x64
+		{A3DD51CE-63AB-4189-9D8A-3111288A3463}.Debug|x64.Build.0 = Debug|x64
+		{A3DD51CE-63AB-4189-9D8A-3111288A3463}.Debug|x86.ActiveCfg = Debug|Win32
+		{A3DD51CE-63AB-4189-9D8A-3111288A3463}.Debug|x86.Build.0 = Debug|Win32
+		{A3DD51CE-63AB-4189-9D8A-3111288A3463}.Release|x64.ActiveCfg = Release|x64
+		{A3DD51CE-63AB-4189-9D8A-3111288A3463}.Release|x64.Build.0 = Release|x64
+		{A3DD51CE-63AB-4189-9D8A-3111288A3463}.Release|x86.ActiveCfg = Release|Win32
+		{A3DD51CE-63AB-4189-9D8A-3111288A3463}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

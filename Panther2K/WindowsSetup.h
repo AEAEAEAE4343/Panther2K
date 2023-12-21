@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Console.h"
+#include <PantherConsole.h>
 #include "Page.h"
 #include "WelcomePage.h"
 #include <wimgapi.h>
@@ -22,13 +22,16 @@ public:
 	static wchar_t GetFirstFreeDrive();
 	static bool LoadConfig();
 
+	static int RunPartitionManager();
 	static int RunSetup();
 	static void LoadPhase(int phase);
+	static bool SelectPartitionsWithDisk(int diskNumber);
 	static void SelectPartition(int stringIndex, VOLUME_INFO volume);
-	static void SelectNextPartition(int stringIndex, int direction);
-	static void KeyHandler(WPARAM wParam);
+	static void SelectNextPartition(int index);
+	static bool KeyHandler(WPARAM wParam);
 	static void LoadPage(Page* page);
 
+	static void LoadDrivers();
 	static bool LoadWimFile();
 	static void GetWimImageCount();
 	static void EnumerateImageInfo();
@@ -54,12 +57,12 @@ public:
 
 	// Global
 	static bool IsWinPE;
-	static COLOR BackgroundColor;
-	static COLOR ForegroundColor;
-	static COLOR ProgressBarColor;
-	static COLOR ErrorColor;
-	static COLOR LightForegroundColor;
-	static COLOR DarkForegroundColor;
+	static int BackgroundColor;
+	static int ForegroundColor;
+	static int ProgressBarColor;
+	static int ErrorColor;
+	static int LightForegroundColor;
+	static int DarkForegroundColor;
 	static COLOR ConfigBackgroundColor;
 	static COLOR ConfigForegroundColor;
 	static COLOR ConfigProgressBarColor;
@@ -84,6 +87,7 @@ public:
 	static const wchar_t* Partition1Mount;
 	static const wchar_t* Partition2Mount;
 	static const wchar_t* Partition3Mount;
+	static bool UseRecovery;
 	static bool AllowOtherFileSystems;
 	static bool AllowSmallVolumes;
 

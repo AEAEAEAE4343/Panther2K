@@ -149,6 +149,15 @@ void BootPreparationPage::PrepareBootFiles()
 			GetExitCodeProcess(ShExecInfo.hProcess, &retval);
 			if (retval)
 			{
+				if (WindowsSetup::ContinueWithoutRecovery)
+				{
+					swprintf(errorMessage, MAX_PATH, L"Failed to enable Windows RE (0x%08x). Panther2K will continue without setting up Windows Recovery Environment.", retval);
+					MessageBoxPage* msgBox = new MessageBoxPage(errorMessage, false, this);
+					msgBox->ShowDialog();
+					delete msgBox;
+					goto end;
+				}
+
 				swprintf(errorMessage, MAX_PATH, L"Failed to enable Windows RE (0x%08x).", retval);
 				goto fail;
 			}

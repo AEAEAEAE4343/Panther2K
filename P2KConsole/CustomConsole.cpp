@@ -325,7 +325,7 @@ bool CustomConsole::createFont()
 	}
 
 	font = CreateFontW(16, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Bm437 IBM VGA 8x16");
-	//font = CreateFontW(12, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Windows Setup");
+	//font = CreateFontW(12, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Consolas");
 	fontWidth = 8;
 	fontHeight = 16;
 
@@ -527,8 +527,11 @@ LRESULT CALLBACK CustomConsole::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPAR
 		}
 		for (int i = 0; i < columns * rows; i++)
 		{
+			// Find updated characters
 			if (screenBuffer[i].updated)
 			{
+				// Immediately set updated to false.
+				// There's a race condition he......
 				screenBuffer[i].updated = false;
 
 				int x = i % columns;
@@ -558,14 +561,13 @@ LRESULT CALLBACK CustomConsole::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPAR
 					bgBr = brushes[screenBuffer[i].backColorIndex];
 				}
 
-				_ASSERT(bgBr);
-
 				FillRect(hdcBuf, &rect, bgBr);
 				if (screenBuffer[i].backColorIndex == -1)
 					DeleteObject(bgBr);
 
 				SetTextColor(hdcBuf, screenBuffer[i].foreColor.ToColor());
-				_ASSERT(DrawTextW(hdcBuf, &screenBuffer[i].character, 1, &rect, DT_LEFT | DT_TOP));
+				//wprintf(L"drawing char '%s'...", &screenBuffer[i].character);
+				DrawTextW(hdcBuf, &screenBuffer[i].character, 1, &rect, DT_LEFT | DT_TOP);
 			}
 		}
 		RedrawImmediately();

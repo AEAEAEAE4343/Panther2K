@@ -8,6 +8,8 @@
 #include <shlobj_core.h>
 #include <iostream>
 
+#include "PantherLogger.h"
+
 #define ObjectNameInformation (OBJECT_INFORMATION_CLASS)1
 #define SafeRelease(x) {if (NULL != x) { x->Release(); x = NULL; } }
 #define SafeCoFree(x) {if (NULL != x) { CoTaskMemFree(x); x = NULL; } }
@@ -51,27 +53,15 @@ __declspec(dllexport) void InitializeCRT()
 	_CRT_INIT(instance, DLL_PROCESS_ATTACH, NULL);
 };
 
-__declspec(dllexport) int RunWinParted(Console* console)
+__declspec(dllexport) int RunWinParted(Console* console, LibPanther::Logger* logger)
 {
 	int result = PartitionManager::RunWinParted(console);
 	return result;
 };
 
-__declspec(dllexport) HRESULT ApplyP2KLayoutToDiskGPT(Console* console, int diskNumber, bool letters, wchar_t*** mountPath)
+__declspec(dllexport) HRESULT ApplyP2KLayoutToDiskGPT(Console* console, LibPanther::Logger* logger, int diskNumber, bool letters, wchar_t*** mountPath)
 {
 	PartitionManager::SetConsole(console);
-
-	{
-		FILE* stream;
-
-		errno_t err;
-		err = freopen_s(&stream, "wparted.log", "w", stdout);
-		if (err != 0) {
-			// TODO  
-		}
-
-		std::cout << "Hello world!\n";
-	}
 
 	// Show loading screen
 	PartitionManager::CurrentPage = new Page();

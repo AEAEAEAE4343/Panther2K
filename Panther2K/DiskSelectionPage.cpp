@@ -23,17 +23,10 @@ void DiskSelectionPage::Init()
 {
 	wchar_t* displayName = WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].DisplayName;
 	int length = lstrlenW(displayName);
-	wchar_t* textBuffer = (wchar_t*)malloc(length * sizeof(wchar_t) + 14);
-	if (textBuffer)
-	{
-		memcpy(textBuffer, displayName, length * sizeof(wchar_t));
-		memcpy(textBuffer + length, L" Setup", 14);
-		text = textBuffer;
-	}
-	else
-	{
-		text = L"Panther2K Setup";
-	}
+	wchar_t* textBuffer = (wchar_t*)safeMalloc(WindowsSetup::GetLogger(), length * sizeof(wchar_t) + 14);
+	memcpy(textBuffer, displayName, length * sizeof(wchar_t));
+	memcpy(textBuffer + length, L" Setup", 14);
+	text = textBuffer;
 	statusText = L"";
 
 	HANDLE diskFileHandle;
@@ -44,9 +37,7 @@ void DiskSelectionPage::Init()
 	if (diskInfo != NULL)
 		free(diskInfo);
 
-	wchar_t* dosdevs = (wchar_t*)malloc(sizeof(wchar_t*) * 65536);
-	if (dosdevs == NULL)
-		return;
+	wchar_t* dosdevs = (wchar_t*)safeMalloc(WindowsSetup::GetLogger(), sizeof(wchar_t*) * 65536);
 
 	QueryDosDeviceW(NULL, dosdevs, 65536);
     diskCount = 0;
@@ -54,9 +45,7 @@ void DiskSelectionPage::Init()
 		if (wcsncmp(pos, L"PhysicalDrive", 13) == 0)
 			diskCount++;
 
-	diskInfo = (DISK_INFO*)malloc(sizeof(DISK_INFO) * diskCount);
-	if (diskInfo == NULL)
-		return;
+	diskInfo = (DISK_INFO*)safeMalloc(WindowsSetup::GetLogger(), sizeof(DISK_INFO) * diskCount);
 
 	int i = 0;
 	for (wchar_t* pos = dosdevs; *pos; pos += lstrlenW(pos) + 1)
@@ -106,7 +95,7 @@ void DiskSelectionPage::Drawer()
 	int boxHeight = console->GetSize().cy - (boxY + 2);
 	DrawBox(boxX, boxY, boxWidth, boxHeight, true);
 
-	wchar_t* buffer = (wchar_t*)malloc(sizeof(wchar_t) * (boxWidth - 2));
+	wchar_t* buffer = (wchar_t*)safeMalloc(WindowsSetup::GetLogger(), sizeof(wchar_t) * (boxWidth - 2));
 	swprintf(buffer, boxWidth - 2, L"   Disk  Device Name                        %*sType      Disk size   ", boxWidth - 68, L"");
 	console->SetPosition(boxX + 1, boxY + 1);
 	console->Write(buffer);
@@ -126,7 +115,7 @@ void DiskSelectionPage::Redrawer()
 	bool canScrollDown = (scrollIndex + maxItems) < WindowsSetup::WimImageCount;
 	bool canScrollUp = scrollIndex != 0;
 
-	wchar_t* buffer = (wchar_t*)malloc(sizeof(wchar_t) * (boxWidth - 2));
+	wchar_t* buffer = (wchar_t*)safeMalloc(WindowsSetup::GetLogger(), sizeof(wchar_t) * (boxWidth - 2));
 	wchar_t sizeBuffer[10];
 	for (int i = 0; i < min(diskCount + 1, maxItems); i++)
 	{

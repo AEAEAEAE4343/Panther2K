@@ -77,13 +77,10 @@ void PartitionSelectionPage::EnumeratePartitions()
 		VOLUME_INFO vi = { 0 };
 		IO_STATUS_BLOCK iosb = { 0 };
 		FILE_FS_FULL_SIZE_INFORMATION fsi = { 0 };
-		VOLUME_DISK_EXTENTS* vde = (VOLUME_DISK_EXTENTS*)malloc(sizeof(VOLUME_DISK_EXTENTS));
-		DRIVE_LAYOUT_INFORMATION_EX* dli = (DRIVE_LAYOUT_INFORMATION_EX*)malloc(sizeof(DRIVE_LAYOUT_INFORMATION_EX));
+		VOLUME_DISK_EXTENTS* vde = (VOLUME_DISK_EXTENTS*)safeMalloc(WindowsSetup::GetLogger(), sizeof(VOLUME_DISK_EXTENTS));
+		DRIVE_LAYOUT_INFORMATION_EX* dli = (DRIVE_LAYOUT_INFORMATION_EX*)safeMalloc(WindowsSetup::GetLogger(), sizeof(DRIVE_LAYOUT_INFORMATION_EX));
 		int partitionCount = 1;
 		bool done = false;
-
-		if (!vde || !dli)
-			goto cleanup;
 		
 		lstrcpyW(szNextVolNameNoBSlash, szNextVolName);
 		szNextVolNameNoBSlash[lstrlenW(szNextVolNameNoBSlash) - 1] = L'\0';
@@ -146,9 +143,7 @@ void PartitionSelectionPage::EnumeratePartitions()
 
 				size_t size = offsetof(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry[++partitionCount]);
 				free(dli);
-				dli = (DRIVE_LAYOUT_INFORMATION_EX*)malloc(size);
-				if (!dli)
-					goto cleanup;
+				dli = (DRIVE_LAYOUT_INFORMATION_EX*)safeMalloc(WindowsSetup::GetLogger(), size);
 			}
 			else done = true;
 		} while (!done);
@@ -191,17 +186,10 @@ void PartitionSelectionPage::Init()
 {
 	wchar_t* displayName = WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].DisplayName;
 	int length = lstrlenW(displayName);
-	wchar_t* textBuffer = (wchar_t*)malloc(length * sizeof(wchar_t) + 14);
-	if (textBuffer)
-	{
-		memcpy(textBuffer, displayName, length * sizeof(wchar_t));
-		memcpy(textBuffer + length, L" Setup", 14);
-		text = textBuffer;
-	}
-	else
-	{
-		text = L"Panther2K Setup";
-	}
+	wchar_t* textBuffer = (wchar_t*)safeMalloc(WindowsSetup::GetLogger(), length * sizeof(wchar_t) + 14);
+	memcpy(textBuffer, displayName, length * sizeof(wchar_t));
+	memcpy(textBuffer + length, L" Setup", 14);
+	text = textBuffer;
 	statusText = L"  ENTER=Select  F8=DiskPart  F9=Display all  ESC=Back  F3=Quit";
 }
 
@@ -227,7 +215,7 @@ void PartitionSelectionPage::Drawer()
 	int boxHeight = console->GetSize().cy - (boxY + 2);
 	DrawBox(boxX, boxY, boxWidth, boxHeight, true);
 
-	wchar_t* buffer = (wchar_t*)malloc(sizeof(wchar_t) * (boxWidth - 2));
+	wchar_t* buffer = (wchar_t*)safeMalloc(WindowsSetup::GetLogger(), sizeof(wchar_t) * (boxWidth - 2));
 	swprintf(buffer, boxWidth - 2, L"   Disk  Partition  Volume Name%*sSize (GB)  Mount Point  ", boxWidth - 58, L"");
 	console->SetPosition(boxX + 1, boxY + 1);
 	console->Write(buffer);
@@ -247,7 +235,7 @@ void PartitionSelectionPage::Redrawer()
 	bool canScrollDown = (scrollIndex + maxItems) < WindowsSetup::WimImageCount;
 	bool canScrollUp = scrollIndex != 0;
 
-	wchar_t* buffer = (wchar_t*)malloc(sizeof(wchar_t) * (boxWidth - 2));
+	wchar_t* buffer = (wchar_t*)safeMalloc(WindowsSetup::GetLogger(), sizeof(wchar_t) * (boxWidth - 2));
 	for (int i = 0; i < min(volumeInfo.size(), maxItems); i++)
 	{
 		if (i == selectionIndex)

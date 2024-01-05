@@ -1,6 +1,7 @@
 #pragma once
 
 #include <PantherConsole.h>
+#include <PantherLogger.h>
 #include "Page.h"
 #include "WelcomePage.h"
 #include <wimgapi.h>
@@ -35,6 +36,8 @@ public:
 	static bool LoadWimFile();
 	static void GetWimImageCount();
 	static void EnumerateImageInfo();
+
+	static LibPanther::Logger* GetLogger();
 
 	/*
 	 * Configuration
@@ -105,6 +108,7 @@ private:
 	static bool LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootPath, const wchar_t* mountPath, const wchar_t** destVolume, const wchar_t** destMount);
 	static bool LocateWimFile(wchar_t* buffer);
 
+	static LibPanther::Logger* logger;
 	static Console* console;
 	static Page* currentPage;
 };

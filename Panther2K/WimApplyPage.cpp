@@ -210,18 +210,11 @@ void WimApplyPage::Init()
 {
 	wchar_t* displayName = WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].DisplayName;
 	int length = lstrlenW(displayName);
-	wchar_t* textBuffer = (wchar_t*)malloc(length * sizeof(wchar_t) + 14);
-	if (textBuffer)
-	{
-		memcpy(textBuffer, displayName, length * sizeof(wchar_t));
-		memcpy(textBuffer + length, L" Setup", 14);
-		text = textBuffer;
-	}
-	else
-	{
-		text = L"Panther2K Setup";
-	}
-	statusText = (wchar_t*)malloc(sizeof(wchar_t) * (console->GetSize().cx + 1));
+	wchar_t* textBuffer = (wchar_t*)safeMalloc(WindowsSetup::GetLogger(), length * sizeof(wchar_t) + 14);
+	memcpy(textBuffer, displayName, length * sizeof(wchar_t));
+	memcpy(textBuffer + length, L" Setup", 14);
+	text = textBuffer;
+	statusText = (wchar_t*)safeMalloc(WindowsSetup::GetLogger(), sizeof(wchar_t) * (console->GetSize().cx + 1));
 	memcpy(((wchar_t*)statusText), L"  Panther2K is installing Windows...", 37 * sizeof(wchar_t));
 }
 

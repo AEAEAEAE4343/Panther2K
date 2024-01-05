@@ -11,8 +11,6 @@
 #include "PartitionSelectionPage.h"
 #include "DiskSelectionPage.h"
 
-#include "Logger.h"
-
 #include "Gdiplus.h"
 using namespace Gdiplus;
 #pragma comment (lib,"Gdiplus.lib")
@@ -20,6 +18,9 @@ using namespace Gdiplus;
 #include "Resource.h"
 #include "iatpatch.h"
 #include <Shlwapi.h>
+
+// Undocumented WIMGAPI flag, loads the file with solid compression
+#define WIM_FLAG_SOLIDCOMPRESSION 0x20000000
 
 // Config
 bool WindowsSetup::UseCp437 = false;
@@ -68,6 +69,7 @@ bool WindowsSetup::ContinueWithoutRecovery = true;
 int WindowsSetup::RebootTimer = 10000;
 
 Console* WindowsSetup::console = 0;
+LibPanther::Logger* WindowsSetup::logger = 0;
 Page* WindowsSetup::currentPage = 0;
 
 bool isPartedLoaded = false;
@@ -125,53 +127,26 @@ wchar_t WindowsSetup::GetFirstFreeDrive()
 bool WindowsSetup::LoadPartitionFromMount(const wchar_t* buffer, const wchar_t** destVolume, const wchar_t** destMount)
 {
 	int c = lstrlenW(buffer);
-	wchar_t* partition = (wchar_t*)malloc(sizeof(wchar_t) * c);
-	if (!partition)
-	{
-		MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to allocate memory through malloc(). Panther2K will exit.", true, currentPage);
-		msgBox->ShowDialog();
-		delete msgBox;
-		return false;
-	}
+	wchar_t* partition = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * c);
 	memcpy(partition, buffer + 1, c * sizeof(wchar_t));
 	*destMount = partition;
-	wchar_t* tempVolume = (wchar_t*)malloc(sizeof(wchar_t) * 50);
-	if (!tempVolume)
-	{
-		MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to allocate memory through malloc(). Panther2K will exit.", true, currentPage);
-		msgBox->ShowDialog();
-		delete msgBox;
-		return false;
-	}
+	wchar_t* tempVolume = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * 50);
 	GetVolumeNameForVolumeMountPointW(WindowsSetup::Partition1Mount, tempVolume, 50);
 	*destVolume = tempVolume;
+	return true;
 }
 
 bool WindowsSetup::LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootPath, const wchar_t* mountPath, const wchar_t** destVolume, const wchar_t** destMount)
 {
 	int c = lstrlenW(buffer);
-	wchar_t* partition = (wchar_t*)malloc(sizeof(wchar_t) * c);
-	if (!partition)
-	{
-		MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to allocate memory through malloc(). Panther2K will exit.", true, currentPage);
-		msgBox->ShowDialog();
-		delete msgBox;
-		return false;
-	}
+	wchar_t* partition = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * c);
 	memcpy(partition, buffer + 1, c * sizeof(wchar_t));
 	*destVolume = partition;
 	DWORD length = 0;
 	GetVolumePathNamesForVolumeNameW(*destVolume, buffer, length, &length);
 	if (length != 0)
 	{
-		wchar_t* pathBuffer = (wchar_t*)malloc(sizeof(wchar_t) * length);
-		if (!pathBuffer)
-		{
-			MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to allocate memory through malloc(). Panther2K will exit.", true, currentPage);
-			msgBox->ShowDialog();
-			delete msgBox;
-			return false;
-		}
+		wchar_t* pathBuffer = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * length);
 		GetVolumePathNamesForVolumeNameW(*destVolume, pathBuffer, length, &length);
 		int bufferPtr = 0;
 		for (int i = 0; i < length; i++)
@@ -191,7 +166,7 @@ bool WindowsSetup::LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootP
 	}
 	if (WindowsSetup::IsWinPE)
 	{
-		wchar_t* mountPoint = (wchar_t*)malloc(sizeof(wchar_t) * 4);
+		wchar_t* mountPoint = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * 4);
 		mountPoint[0] = WindowsSetup::GetFirstFreeDrive();
 		if (mountPoint[0] == L'0')
 		{
@@ -268,6 +243,13 @@ bool WindowsSetup::LocateWimFile(wchar_t* buffer)
 				memcpy(buffer, pathBuffer, sizeof(wchar_t) * 23);
 				return true;
 			}
+			memcpy(pathBuffer, L"0:\\sources\\install.swm", sizeof(wchar_t) * 23);
+			pathBuffer[0] = chars[i % 26];
+			if (FileExists(pathBuffer))
+			{
+				memcpy(buffer, pathBuffer, sizeof(wchar_t) * 23);
+				return true;
+			}
 		}
 	return false;
 }
@@ -317,12 +299,12 @@ bool WindowsSetup::LoadConfig()
 			return false;
 		}
 
-		wchar_t* wimPath = (wchar_t*)malloc(sizeof(wchar_t) * (lstrlenW(buffer) + 1));
+		wchar_t* wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
 		memcpy(wimPath, buffer, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
 		WimFile = wimPath;
 		if (!LoadWimFile())
 		{
-			msgBox = new MessageBoxPage(L"The WIM file specified in the config could not be loaded. Panther2K will exit.", true, currentPage);
+			msgBox = new MessageBoxPage(L"The WIM file could not be loaded. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
 			delete msgBox;
 			return false;
@@ -335,16 +317,9 @@ bool WindowsSetup::LoadConfig()
 		SkipPhase2Wim = true;
 		wchar_t* wimPath;
 		if (buffer[0] == L'\\')
-			wimPath = (wchar_t*)malloc(sizeof(wchar_t) * (lstrlenW(buffer) + lstrlenW(rootFilePath)));
+			wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(buffer) + lstrlenW(rootFilePath)));
 		else
-			wimPath = (wchar_t*)malloc(sizeof(wchar_t) * (lstrlenW(buffer) + 1));
-		if (!wimPath)
-		{
-			msgBox = new MessageBoxPage(L"Failed to allocate memory through malloc(). Panther2K will exit.", true, currentPage);
-			msgBox->ShowDialog();
-			delete msgBox;
-			return false;
-		}
+			wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
 		if (buffer[0] == L'\\')
 		{
 			memcpy(wimPath, rootFilePath, sizeof(wchar_t) * (lstrlenW(rootFilePath)));
@@ -598,9 +573,9 @@ bool WindowsSetup::LoadConfig()
 int WindowsSetup::RunPartitionManager() 
 {
 	// Try loading WinParted
-	typedef int (*RunWinParted)(Console*);
+	typedef int (*RunWinParted)(Console*, LibPanther::Logger*);
 	typedef void (*InitializeCRT)();
-	typedef HRESULT (*ApplyP2KLayoutToDiskGPT)(Console*, int);
+	typedef HRESULT (*ApplyP2KLayoutToDiskGPT)(Console*, LibPanther::Logger*, int);
 
 	auto winParted = LoadLibraryA("WinParted.exe");
 
@@ -612,7 +587,7 @@ int WindowsSetup::RunPartitionManager()
 	}
 
 	auto runWinParted = (RunWinParted)GetProcAddress(winParted, (LPCSTR)3);
-	runWinParted(console);
+	runWinParted(console, logger);
 
 	currentPage->Draw();
 
@@ -628,11 +603,14 @@ void WindowsSetup::LoadDrivers()
 
 	if (!(dwAttrib != INVALID_FILE_ATTRIBUTES &&
 		(dwAttrib & FILE_ATTRIBUTE_DIRECTORY)))
+	{
 		return;
+	}
 
 	HANDLE hFind = FindFirstFileW(L".\\drivers\\*", &ffd);
 	int lastError = GetLastError();
 
+	wchar_t buffer[MAX_PATH * 2];
 	if (hFind != INVALID_HANDLE_VALUE)
 	{
 		do
@@ -640,12 +618,15 @@ void WindowsSetup::LoadDrivers()
 			wchar_t* dot = wcsrchr(ffd.cFileName, L'.');
 			if (dot && !wcscmp(dot, L".inf") && !(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
 			{
+				swprintf_s(buffer, MAX_PATH * 2, L"Loading driver %s...", ffd.cFileName);
+				logger->Write(PANTHER_LL_DETAILED, buffer);
+
 				swprintf_s(commandBuffer, MAX_PATH + 25, L"drvload.exe .\\drivers\\%s", ffd.cFileName);
 				int ret = _wsystem(commandBuffer);
 				if (ret) 
 				{
-					wchar_t buffer[MAX_PATH * 2];
 					swprintf_s(buffer, MAX_PATH * 2, L"An error occured while loading driver %s. Panther2K will start, but a device required for installation might not be available.", ffd.cFileName);
+					logger->Write(PANTHER_LL_NORMAL, buffer);
 					MessageBoxPage* msgBox = new MessageBoxPage(buffer, false, currentPage);
 					msgBox->ShowDialog();
 					delete msgBox;
@@ -653,11 +634,12 @@ void WindowsSetup::LoadDrivers()
 				}
 			}
 
-		} while (FindNextFile(hFind, &ffd) != 0);
+		} while (FindNextFileW(hFind, &ffd) != 0);
 		FindClose(hFind);
 	}
 	else
 	{
+		logger->Write(PANTHER_LL_NORMAL, L"Could not enumerate Windows PE drivers. Panther2K will start, but a device required for installation might not be available.");
 		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occured while enumerating available drivers. Panther2K will start, but a device required for installation might not be available.", false, currentPage);
 		msgBox->ShowDialog();
 		delete msgBox;
@@ -672,31 +654,55 @@ int WindowsSetup::RunSetup()
 	AllocConsole();
 #endif
 
+	// Start logger immediately
+	logger = new LibPanther::Logger(L"panther2k.log", PANTHER_LL_VERBOSE);
+	logger->Write(PANTHER_LL_BASIC, L"Starting Panther2K version 1.3...");
+
 	// Initialize GDI+.
+	logger->Write(PANTHER_LL_DETAILED, L"Initializing GDI+...");
 	GdiplusStartupInput gdiplusStartupInput;
 	ULONG_PTR           gdiplusToken;
-	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+	if (GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL) != Gdiplus::Ok) 
+	{
+		logger->Write(PANTHER_LL_BASIC, L"GDI Initialization failed.");
+		MessageBoxW(NULL, L"Failed to initialize GDI+. Panther2K can not load.", L"Panther2K Early Init", MB_OK | MB_ICONERROR);
+		return false;
+	}
 
 	// Load font
+	logger->Write(PANTHER_LL_DETAILED, L"Loading font resources...");
 	HRSRC res = FindResourceW(GetModuleHandleW(NULL), MAKEINTRESOURCEW(IDR_FONT_IBM), RT_RCDATA);
 	HGLOBAL mem = LoadResource(GetModuleHandleW(NULL), res);
 	void* data = LockResource(mem);
 	size_t len = SizeofResource(GetModuleHandleW(NULL), res);
 	DWORD nFonts = 0;
 	HANDLE hFontRes = AddFontMemResourceEx(data, len, NULL, &nFonts);
-
 	if (hFontRes == 0)
 	{
-		MessageBoxW(NULL, L"Failed to load font. Panther2K will exit.", L"Panther2K early load", MB_OK | MB_ICONERROR);
+		logger->Write(PANTHER_LL_BASIC, L"Failed to load font.");
+		MessageBoxW(NULL, L"Failed to load font. Panther2K can not load.", L"Panther2K Early Init", MB_OK | MB_ICONERROR);
 		return false;
 	}
-	AllocConsole();
+	
+	// Create console
+	//AllocConsole();
+	bool win32 = false;
+	if (win32) 
+	{
+		logger->Write(PANTHER_LL_DETAILED, L"Creating Win32 console...");
+		console = new Win32Console();
+		console->Init();
+	}
+	else 
+	{
+		logger->Write(PANTHER_LL_DETAILED, L"Creating custom console...");
+		console = new CustomConsole();
+		console->Init();
+		ShowWindow(((CustomConsole*)console)->WindowHandle, SW_SHOW);
+		SendMessage(((CustomConsole*)console)->WindowHandle, WM_KEYDOWN, VK_F11, 0);
+	}
 
-	console = new CustomConsole();
-	console->Init();
-	ShowWindow(((CustomConsole*)console)->WindowHandle, SW_SHOW);
-	SendMessage(((CustomConsole*)console)->WindowHandle, WM_KEYDOWN, VK_F11, 0);
-
+	// Start loading the setup
 	Page* loadPage = new Page();
 	LoadPage(loadPage);
 	loadPage->text = L"Panther2K";
@@ -707,22 +713,29 @@ int WindowsSetup::RunSetup()
 	// Load PE drivers
 	if (IsWinPE) 
 	{
+		logger->Write(PANTHER_LL_DETAILED, L"Loading WinPE drivers...");
 		loadPage->statusText = L"  Windows is loading drivers...";
 		loadPage->Draw();
 		LoadDrivers();
 	}
 
 	// Load config
+	logger->Write(PANTHER_LL_DETAILED, L"Loading configuration...");
 	loadPage->statusText = L"  Windows is starting Panther2K...";
 	loadPage->Draw();
 	DoEvents();
 	if (!LoadConfig())
+	{
+		logger->Write(PANTHER_LL_BASIC, L"Failed to load config file...");
 		return ERROR_INVALID_PARAMETER;
+	}
 
 	// TEMPORARY: code page 437 is unsupported currently
 	// WinPE is unsupported currently
 	UseCp437 = false;
-	IsWinPE = false;
+	IsWinPE = true;
+
+	logger->Write(PANTHER_LL_NORMAL, L"Finished initialization.");
 
 	// Start welcome phase
 	LoadPhase(1);
@@ -741,6 +754,10 @@ int WindowsSetup::RunSetup()
 
 void WindowsSetup::LoadPhase(int phase)
 {
+	wchar_t logBuffer[MAX_PATH * 2];
+	swprintf_s(logBuffer, L"Starting phase %d.", phase);
+	logger->Write(PANTHER_LL_DETAILED, logBuffer);
+
 	Page* page;
 	switch (phase)
 	{
@@ -771,8 +788,11 @@ void WindowsSetup::LoadPhase(int phase)
 		else if (WimImageCount == -1)
 		{
 			// If we skip phase 2, we still need to get the image count and info to display what we're installing
+			logger->Write(PANTHER_LL_NORMAL, L"Reading WIM information...");
 			GetWimImageCount();
 			EnumerateImageInfo();
+			swprintf_s(logBuffer, L"The WIM file has %d images.", WimImageCount);
+			logger->Write(PANTHER_LL_VERBOSE, logBuffer);
 		}
 	case 3:
 		if (!SkipPhase3)
@@ -830,6 +850,13 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 	typedef HRESULT(*ApplyP2KLayoutToDiskGPT)(Console*, int, bool, wchar_t***);
 
 	auto winParted = LoadLibraryA("WinParted.exe");
+	if (!winParted) 
+	{
+		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occured while preparing the disk. WinParted could not be loaded.", false, currentPage);
+		msgBox->ShowDialog();
+		delete msgBox;
+		return false;
+	}
 
 	if (!isPartedLoaded)
 	{
@@ -839,9 +866,10 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 		isPartedLoaded = true;
 	}
 	
-	wchar_t** mountPoints = (wchar_t**)malloc(sizeof(wchar_t*) * 3);
+	// Has to be on the heap, otherwise the partition manager can't read it
+	wchar_t** mountPoints = (wchar_t**)safeMalloc(logger, sizeof(wchar_t*) * 3);
 	for (int i = 0; i < 3; i++)
-		mountPoints[i] = (wchar_t*)malloc(sizeof(wchar_t) * MAX_PATH);
+		mountPoints[i] = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * MAX_PATH);
 
 	auto applyLayout = (ApplyP2KLayoutToDiskGPT)GetProcAddress(winParted, (LPCSTR)1);
 	HRESULT res = applyLayout(console, diskNumber, IsWinPE, &mountPoints);
@@ -920,10 +948,8 @@ void WindowsSetup::SelectPartition(int stringIndex, VOLUME_INFO volume)
 	default:
 		return;
 	}
-	(*targetVolume) = (wchar_t*)malloc(sizeof(wchar_t) * (MAX_PATH + 1));
-	(*targetMount) = (wchar_t*)malloc(sizeof(wchar_t) * (MAX_PATH + 1));
-	if (!(*targetVolume) || !(*targetMount))
-		return;
+	(*targetVolume) = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (MAX_PATH + 1));
+	(*targetMount) = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (MAX_PATH + 1));
 
 	lstrcpyW((LPWSTR)*targetVolume, volume.guid);
 	if (lstrcmpW(volume.mountPoint, L"") == 0)
@@ -992,7 +1018,7 @@ bool WindowsSetup::KeyHandler(WPARAM wParam)
 		{
 		case VK_NUMPAD0:
 		{
-			COLOR* colorTable = (COLOR*)malloc(sizeof(COLOR) * 6);
+			COLOR* colorTable = (COLOR*)safeMalloc(logger, sizeof(COLOR) * 6);
 			colorTable[BackgroundColor] = ConfigBackgroundColor;
 			colorTable[ForegroundColor] = ConfigForegroundColor;
 			colorTable[ErrorColor] = ConfigErrorColor;
@@ -1004,7 +1030,7 @@ bool WindowsSetup::KeyHandler(WPARAM wParam)
 		}
 		case VK_NUMPAD1:
 		{
-			COLOR* colorTable = (COLOR*)malloc(sizeof(COLOR) * 6);
+			COLOR* colorTable = (COLOR*)safeMalloc(logger, sizeof(COLOR) * 6);
 			colorTable[BackgroundColor] = COLOR{ 0, 0, 170 };
 			colorTable[ForegroundColor] = COLOR{ 170, 170, 170 };
 			colorTable[ErrorColor] = COLOR{ 170, 0, 0 };
@@ -1016,7 +1042,7 @@ bool WindowsSetup::KeyHandler(WPARAM wParam)
 		}
 		case VK_NUMPAD2:
 		{
-			COLOR* colorTable = (COLOR*)malloc(sizeof(COLOR) * 6);
+			COLOR* colorTable = (COLOR*)safeMalloc(logger, sizeof(COLOR) * 6);
 			colorTable[BackgroundColor] = COLOR{ 0, 0, 168 };
 			colorTable[ForegroundColor] = COLOR{ 168, 168, 168 };
 			colorTable[ErrorColor] = COLOR{ 168, 0, 0 };
@@ -1028,7 +1054,7 @@ bool WindowsSetup::KeyHandler(WPARAM wParam)
 		}
 		case VK_NUMPAD3:
 		{
-			COLOR* colorTable = (COLOR*)malloc(sizeof(COLOR) * 6);
+			COLOR* colorTable = (COLOR*)safeMalloc(logger, sizeof(COLOR) * 6);
 			colorTable[BackgroundColor] = COLOR{ 0, 0, 0 };
 			colorTable[ForegroundColor] = COLOR{ 170, 170, 170 };
 			colorTable[ErrorColor] = COLOR{ 170, 0, 0 };
@@ -1071,19 +1097,33 @@ void WindowsSetup::LoadPage(Page* page)
 	currentPage = page;
 }
 
+int EndsWith(const wchar_t* str, const wchar_t* suffix)
+{
+	if (!str || !suffix)
+		return 0;
+	size_t lenstr = lstrlenW(str);
+	size_t lensuffix = lstrlenW(suffix);
+	if (lensuffix > lenstr)
+		return 0;
+	return _wcsnicmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
+}
+
 bool WindowsSetup::LoadWimFile()
 {
-	WimHandle = WIMCreateFile(WimFile, WIM_GENERIC_READ, WIM_OPEN_EXISTING, 0, WIM_COMPRESS_NONE, NULL);
+	unsigned int flags = EndsWith(WimFile, L".esd") ? WIM_FLAG_SOLIDCOMPRESSION : 0;
+	for (int compression = WIM_COMPRESS_NONE; compression <= WIM_COMPRESS_LZMS; compression++) 
+	{
+		WimHandle = WIMCreateFile(WimFile, WIM_GENERIC_READ, WIM_OPEN_EXISTING, flags, compression, NULL);
+		if (WimHandle) break;
+	}
 	if (!WimHandle)
 	{
 		return false;
 	}
-	else
-	{
-		wchar_t path[MAX_PATH];
-		GetTempPathW(MAX_PATH, path);
-		WIMSetTemporaryPath(WimHandle, path);
-	}
+
+	wchar_t path[MAX_PATH];
+	GetTempPathW(MAX_PATH, path);
+	WIMSetTemporaryPath(WimHandle, path);
 	return true;
 }
 
@@ -1128,7 +1168,7 @@ void WindowsSetup::EnumerateImageInfo()
 	SYSTEMTIME time;
 
 	rapidxml::xml_document<>* doc = new rapidxml::xml_document<>();
-	ImageInfo* pointer = (ImageInfo*)malloc(sizeof(ImageInfo) * WimImageCount);
+	ImageInfo* pointer = (ImageInfo*)safeMalloc(logger, sizeof(ImageInfo) * WimImageCount);
 	if (pointer == NULL)
 		return;
 
@@ -1171,4 +1211,9 @@ void WindowsSetup::EnumerateImageInfo()
 
 	delete doc;
 	WimImageInfos = pointer;
+}
+
+LibPanther::Logger* WindowsSetup::GetLogger()
+{
+	return logger;
 }

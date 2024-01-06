@@ -263,84 +263,91 @@ COLOR ParseColor(const wchar_t* text, bool* success)
 
 bool WindowsSetup::LoadConfig()
 {
-	wchar_t buffer[MAX_PATH] = L"";
 	const wchar_t* INIFileRelative = L".\\panther.ini";
-	wchar_t INIFile[MAX_PATH] = L"";
-	wchar_t rootCwdPath[MAX_PATH] = L"";
-	wchar_t rootFilePath[MAX_PATH] = L"";
+
 	DWORD length = 0; 
 	MessageBoxPage* msgBox = 0;
 
+	wchar_t rootCwdPath[MAX_PATH] = L"";
 	_wgetcwd(rootCwdPath, MAX_PATH);
 	PathStripToRoot(rootCwdPath);
+
+	wchar_t rootFilePath[MAX_PATH] = L"";
 	GetModuleFileNameW(NULL, rootFilePath, MAX_PATH);
 	PathStripToRoot(rootFilePath);
 
+	wchar_t INIFile[MAX_PATH] = L"";
+	wchar_t iniBuffer[MAX_PATH] = L"";
 	GetFullPathNameW(L"panther.ini", MAX_PATH, INIFile, NULL);
 
+	wchar_t logBuffer[MAX_PATH] = L"";
+	wsprintfW(logBuffer, L"Loading configuration file '%s'...", INIFile);
+	logger->Write(PANTHER_LL_DETAILED, logBuffer);
+
 	// Generic 
-	GetPrivateProfileStringW(L"Generic", L"CanGoBack", L"Yes", buffer, 4, INIFile);
-	CanGoBack = lstreqW(buffer, L"Yes");
+	GetPrivateProfileStringW(L"Generic", L"CanGoBack", L"Yes", iniBuffer, 4, INIFile);
+	CanGoBack = lstreqW(iniBuffer, L"Yes");
 
 	// Phase 1
-	GetPrivateProfileStringW(L"Phase1", L"SkipWelcome", L"No", buffer, 4, INIFile);
-	SkipPhase1 = lstreqW(buffer, L"Yes");
+	GetPrivateProfileStringW(L"Phase1", L"SkipWelcome", L"No", iniBuffer, 4, INIFile);
+	SkipPhase1 = lstreqW(iniBuffer, L"Yes");
 
 	// Phase 2
-	GetPrivateProfileStringW(L"Phase2", L"WimFile", L"Auto", buffer, MAX_PATH, INIFile);
+	GetPrivateProfileStringW(L"Phase2", L"WimFile", L"Auto", iniBuffer, MAX_PATH, INIFile);
 	
-	if (lstreqW(buffer, L"Auto"))
+	if (lstreqW(iniBuffer, L"Auto"))
 	{
-		if (!LocateWimFile(buffer))
+		if (!LocateWimFile(iniBuffer))
 		{
+			logger->Write(PANTHER_LL_BASIC, L"[Phase2/WimFile] The WIM file could not be found automatically.");
 			msgBox = new MessageBoxPage(L"The WIM file could not be found automatically. Please specify the location of the WIM file to use in the config. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
 			delete msgBox;
 			return false;
 		}
 
-		wchar_t* wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
-		memcpy(wimPath, buffer, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
+		wchar_t* wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
+		memcpy(wimPath, iniBuffer, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
 		WimFile = wimPath;
 		if (!LoadWimFile())
 		{
+			wsprintfW(logBuffer, L"[Phase2/WimFile] The WIM file '%s' could not be loaded.", WimFile);
+			logger->Write(PANTHER_LL_BASIC, logBuffer);
 			msgBox = new MessageBoxPage(L"The WIM file could not be loaded. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
 			delete msgBox;
 			return false;
 		}
-		GetWimImageCount();
-		EnumerateImageInfo();
 	}
-	else if (!lstreqW(buffer, L"Ask"))
+	else if (!lstreqW(iniBuffer, L"Ask"))
 	{
 		SkipPhase2Wim = true;
 		wchar_t* wimPath;
-		if (buffer[0] == L'\\')
-			wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(buffer) + lstrlenW(rootFilePath)));
+		if (iniBuffer[0] == L'\\')
+			wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(iniBuffer) + lstrlenW(rootFilePath)));
 		else
-			wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
-		if (buffer[0] == L'\\')
+			wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
+		if (iniBuffer[0] == L'\\')
 		{
 			memcpy(wimPath, rootFilePath, sizeof(wchar_t) * (lstrlenW(rootFilePath)));
-			memcpy(wimPath + lstrlenW(rootFilePath) - 1, buffer, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
+			memcpy(wimPath + lstrlenW(rootFilePath) - 1, iniBuffer, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
 		}
 		else
-			memcpy(wimPath, buffer, sizeof(wchar_t) * (lstrlenW(buffer) + 1));
+			memcpy(wimPath, iniBuffer, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
 		WimFile = wimPath;
 		if (!LoadWimFile())
 		{
+			wsprintfW(logBuffer, L"[Phase2/WimFile] The WIM file '%s' could not be loaded.", WimFile);
+			logger->Write(PANTHER_LL_BASIC, logBuffer);
 			msgBox = new MessageBoxPage(L"The WIM file specified in the config could not be loaded. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
 			delete msgBox;
 			return false;
 		}
-		GetWimImageCount();
-		EnumerateImageInfo();
 	}
 	else
 	{
-		msgBox = new MessageBoxPage(L"The WIM file specified in the config could not be loaded. Panther2K will exit.", true, currentPage);
+		msgBox = new MessageBoxPage(L"The specified configuration option has not yet been implemented (WimFile=Ask). Panther2K will exit.", true, currentPage);
 		msgBox->ShowDialog();
 		delete msgBox;
 		return false;
@@ -364,13 +371,13 @@ bool WindowsSetup::LoadConfig()
 	}
 
 	// Phase 3
-	GetPrivateProfileStringW(L"Phase3", L"BootMethod", L"Ask", buffer, MAX_PATH, INIFile);
-	if (!lstreqW(buffer, L"Ask"))
+	GetPrivateProfileStringW(L"Phase3", L"BootMethod", L"Ask", iniBuffer, MAX_PATH, INIFile);
+	if (!lstreqW(iniBuffer, L"Ask"))
 	{
 		SkipPhase3 = true;
-		if (lstrcmpW(L"UEFI", buffer) == 0)
+		if (lstrcmpW(L"UEFI", iniBuffer) == 0)
 			UseLegacy = false;
-		else if (lstrcmpW(L"Legacy", buffer) == 0)
+		else if (lstrcmpW(L"Legacy", iniBuffer) == 0)
 			UseLegacy = true;
 		else
 		{
@@ -382,15 +389,15 @@ bool WindowsSetup::LoadConfig()
 	}
 
 	// Phase 4
-	GetPrivateProfileStringW(L"Phase4", L"UseRecovery", L"Yes", buffer, MAX_PATH, INIFile);
-	UseRecovery = lstreqW(buffer, L"Yes");
+	GetPrivateProfileStringW(L"Phase4", L"UseRecovery", L"Yes", iniBuffer, MAX_PATH, INIFile);
+	UseRecovery = lstreqW(iniBuffer, L"Yes");
 	if (SkipPhase3)
 	{
-		GetPrivateProfileStringW(L"Phase4", L"Partition1", L"Ask", buffer, MAX_PATH, INIFile);
-		if (!lstreqW(buffer, L"Ask"))
+		GetPrivateProfileStringW(L"Phase4", L"Partition1", L"Ask", iniBuffer, MAX_PATH, INIFile);
+		if (!lstreqW(iniBuffer, L"Ask"))
 		{
 			SkipPhase4_1 = true;
-			switch (buffer[0])
+			switch (iniBuffer[0])
 			{
 			case L'N':
 				msgBox = new MessageBoxPage(L"Panther2K does not support Disk and Partition number yet. Panther2K will exit.", true, currentPage);
@@ -398,21 +405,21 @@ bool WindowsSetup::LoadConfig()
 				delete msgBox;
 				return false;
 			case L'V':
-				if (!LoadPartitionFromVolume(buffer, rootCwdPath, L"$Panther2K\\Sys\\", &Partition1Volume, &Partition1Mount))
+				if (!LoadPartitionFromVolume(iniBuffer, rootCwdPath, L"$Panther2K\\Sys\\", &Partition1Volume, &Partition1Mount))
 					return false;
 				break;
 			case L'M':
-				if (!LoadPartitionFromMount(buffer, &Partition1Volume, &Partition1Mount))
+				if (!LoadPartitionFromMount(iniBuffer, &Partition1Volume, &Partition1Mount))
 					return false;
 				break;
 			}
 		}
 
-		GetPrivateProfileStringW(L"Phase4", L"Partition3", L"Ask", buffer, MAX_PATH, INIFile);
-		if (!lstreqW(buffer, L"Ask"))
+		GetPrivateProfileStringW(L"Phase4", L"Partition3", L"Ask", iniBuffer, MAX_PATH, INIFile);
+		if (!lstreqW(iniBuffer, L"Ask"))
 		{
 			SkipPhase4_3 = true;
-			switch (buffer[0])
+			switch (iniBuffer[0])
 			{
 			case L'N':
 				msgBox = new MessageBoxPage(L"Panther2K does not support Disk and Partition number yet. Panther2K will exit.", true, currentPage);
@@ -420,11 +427,11 @@ bool WindowsSetup::LoadConfig()
 				delete msgBox;
 				return false;
 			case L'V':
-				if (!LoadPartitionFromVolume(buffer, rootCwdPath, L"$Panther2K\\Win\\", &Partition3Volume, &Partition3Mount))
+				if (!LoadPartitionFromVolume(iniBuffer, rootCwdPath, L"$Panther2K\\Win\\", &Partition3Volume, &Partition3Mount))
 					return false;
 				break;
 			case L'M':
-				if (!LoadPartitionFromMount(buffer, &Partition3Volume, &Partition3Mount))
+				if (!LoadPartitionFromMount(iniBuffer, &Partition3Volume, &Partition3Mount))
 					return false;
 				break;
 			}
@@ -432,11 +439,11 @@ bool WindowsSetup::LoadConfig()
 
 		if (!UseLegacy && UseRecovery)
 		{
-			GetPrivateProfileStringW(L"Phase4", L"Partition2", L"Ask", buffer, MAX_PATH, INIFile);
-			if (!lstreqW(buffer, L"Ask"))
+			GetPrivateProfileStringW(L"Phase4", L"Partition2", L"Ask", iniBuffer, MAX_PATH, INIFile);
+			if (!lstreqW(iniBuffer, L"Ask"))
 			{
 				SkipPhase4_2 = true;
-				switch (buffer[0])
+				switch (iniBuffer[0])
 				{
 				case L'N':
 					msgBox = new MessageBoxPage(L"Panther2K does not support Disk and Partition number yet. Panther2K will exit.", true, currentPage);
@@ -444,37 +451,37 @@ bool WindowsSetup::LoadConfig()
 					delete msgBox;
 					return false;
 				case L'V':
-					if (!LoadPartitionFromVolume(buffer, rootCwdPath, L"$Panther2K\\Rec\\", &Partition2Volume, &Partition2Mount))
+					if (!LoadPartitionFromVolume(iniBuffer, rootCwdPath, L"$Panther2K\\Rec\\", &Partition2Volume, &Partition2Mount))
 						return false;
 					break;
 				case L'M':
-					if (!LoadPartitionFromMount(buffer, &Partition2Volume, &Partition2Mount))
+					if (!LoadPartitionFromMount(iniBuffer, &Partition2Volume, &Partition2Mount))
 						return false;
 					break;
 				}
 			}
 		}
 	}
-	GetPrivateProfileStringW(L"Phase4", L"AllowOtherFileSystems", L"No", buffer, 4, INIFile);
-	AllowOtherFileSystems = lstreqW(buffer, L"Yes");
+	GetPrivateProfileStringW(L"Phase4", L"AllowOtherFileSystems", L"No", iniBuffer, 4, INIFile);
+	AllowOtherFileSystems = lstreqW(iniBuffer, L"Yes");
 
-	GetPrivateProfileStringW(L"Phase4", L"AllowSmallVolumes", L"No", buffer, 4, INIFile);
-	AllowSmallVolumes = lstreqW(buffer, L"Yes");
+	GetPrivateProfileStringW(L"Phase4", L"AllowSmallVolumes", L"No", iniBuffer, 4, INIFile);
+	AllowSmallVolumes = lstreqW(iniBuffer, L"Yes");
 	
 	// Phase 5
-	GetPrivateProfileStringW(L"Phase5", L"ShowFileNames", L"Yes", buffer, 4, INIFile);
-	ShowFileNames = lstreqW(buffer, L"Yes");
+	GetPrivateProfileStringW(L"Phase5", L"ShowFileNames", L"Yes", iniBuffer, 4, INIFile);
+	ShowFileNames = lstreqW(iniBuffer, L"Yes");
 
 	// Phase 6
-	GetPrivateProfileStringW(L"Phase6", L"ContinueWithoutRecovery", L"Yes", buffer, 4, INIFile);
-	ContinueWithoutRecovery = lstreqW(buffer, L"Yes");
+	GetPrivateProfileStringW(L"Phase6", L"ContinueWithoutRecovery", L"Yes", iniBuffer, 4, INIFile);
+	ContinueWithoutRecovery = lstreqW(iniBuffer, L"Yes");
 
 	// Phase 7
 	RebootTimer = GetPrivateProfileIntW(L"Phase7", L"RebootTimer", 10000, INIFile);
 
 	// Console
-	GetPrivateProfileStringW(L"Console", L"ColorScheme", L"Windows Setup", buffer, MAX_PATH, INIFile);
-	if (!lstrcmpW(buffer, L"Windows Setup"))
+	GetPrivateProfileStringW(L"Console", L"ColorScheme", L"Windows Setup", iniBuffer, MAX_PATH, INIFile);
+	if (!lstrcmpW(iniBuffer, L"Windows Setup"))
 	{
 		ConfigBackgroundColor = COLOR{ 0, 0, 168 };
 		ConfigForegroundColor = COLOR{ 168, 168, 168 };
@@ -483,7 +490,7 @@ bool WindowsSetup::LoadConfig()
 		ConfigLightForegroundColor = COLOR{ 255, 255, 255 };
 		ConfigDarkForegroundColor = COLOR{ 0, 0, 0 };
 	}
-	else if (!lstrcmpW(buffer, L"BIOS (Blue)"))
+	else if (!lstrcmpW(iniBuffer, L"BIOS (Blue)"))
 	{
 		ConfigBackgroundColor = COLOR{ 0, 0, 170 };
 		ConfigForegroundColor = COLOR{ 170, 170, 170 };
@@ -492,7 +499,7 @@ bool WindowsSetup::LoadConfig()
 		ConfigLightForegroundColor = COLOR{ 255, 255, 255 };
 		ConfigDarkForegroundColor = COLOR{ 0, 0, 0 };
 	}
-	else if (!lstrcmpW(buffer, L"BIOS (Black)"))
+	else if (!lstrcmpW(iniBuffer, L"BIOS (Black)"))
 	{
 		ConfigBackgroundColor = COLOR{ 0, 0, 0 };
 		ConfigForegroundColor = COLOR{ 170, 170, 170 };
@@ -501,7 +508,7 @@ bool WindowsSetup::LoadConfig()
 		ConfigLightForegroundColor = COLOR{ 255, 255, 255 };
 		ConfigDarkForegroundColor = COLOR{ 0, 0, 0 };
 	}
-	else if (!lstrcmpW(buffer, L"Custom"))
+	else if (!lstrcmpW(iniBuffer, L"Custom"))
 	{
 		goto parse;
 	fail:
@@ -511,23 +518,23 @@ bool WindowsSetup::LoadConfig()
 		return false;
 	parse:
 		bool success = false;
-		GetPrivateProfileStringW(L"Console", L"BackgroundColor", L"Fail", buffer, MAX_PATH, INIFile);
-		ConfigBackgroundColor = ParseColor(buffer, &success);
+		GetPrivateProfileStringW(L"Console", L"BackgroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+		ConfigBackgroundColor = ParseColor(iniBuffer, &success);
 		if (!success) goto fail;
-		GetPrivateProfileStringW(L"Console", L"ForegroundColor", L"Fail", buffer, MAX_PATH, INIFile);
-		ConfigForegroundColor = ParseColor(buffer, &success);
+		GetPrivateProfileStringW(L"Console", L"ForegroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+		ConfigForegroundColor = ParseColor(iniBuffer, &success);
 		if (!success) goto fail;
-		GetPrivateProfileStringW(L"Console", L"ErrorColor", L"Fail", buffer, MAX_PATH, INIFile);
-		ConfigErrorColor = ParseColor(buffer, &success);
+		GetPrivateProfileStringW(L"Console", L"ErrorColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+		ConfigErrorColor = ParseColor(iniBuffer, &success);
 		if (!success) goto fail;
-		GetPrivateProfileStringW(L"Console", L"ProgressBarColor", L"Fail", buffer, MAX_PATH, INIFile);
-		ConfigProgressBarColor = ParseColor(buffer, &success);
+		GetPrivateProfileStringW(L"Console", L"ProgressBarColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+		ConfigProgressBarColor = ParseColor(iniBuffer, &success);
 		if (!success) goto fail;
-		GetPrivateProfileStringW(L"Console", L"LightForegroundColor", L"Fail", buffer, MAX_PATH, INIFile);
-		ConfigLightForegroundColor = ParseColor(buffer, &success);
+		GetPrivateProfileStringW(L"Console", L"LightForegroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+		ConfigLightForegroundColor = ParseColor(iniBuffer, &success);
 		if (!success) goto fail;
-		GetPrivateProfileStringW(L"Console", L"DarkForegroundColor", L"Fail", buffer, MAX_PATH, INIFile);
-		ConfigDarkForegroundColor = ParseColor(buffer, &success);
+		GetPrivateProfileStringW(L"Console", L"DarkForegroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+		ConfigDarkForegroundColor = ParseColor(iniBuffer, &success);
 		if (!success) goto fail;
 	}
 	else
@@ -548,15 +555,15 @@ bool WindowsSetup::LoadConfig()
 		delete msgBox;
 		return false;
 	}
-	GetPrivateProfileStringW(L"Console", L"FontSmoothing", L"No", buffer, 4, INIFile);
-	bool smooth = lstreqW(buffer, L"Yes");
-	GetPrivateProfileStringW(L"Console", L"Font", L"Bm437 IBM VGA 8x16", buffer, MAX_PATH, INIFile);
-	HFONT font = CreateFontW(fontHeight, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, smooth ? DEFAULT_QUALITY : NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, buffer);
+	GetPrivateProfileStringW(L"Console", L"FontSmoothing", L"No", iniBuffer, 4, INIFile);
+	bool smooth = lstreqW(iniBuffer, L"Yes");
+	GetPrivateProfileStringW(L"Console", L"Font", L"Bm437 IBM VGA 8x16", iniBuffer, MAX_PATH, INIFile);
+	HFONT font = CreateFontW(fontHeight, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, smooth ? DEFAULT_QUALITY : NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, iniBuffer);
 	
 	LOGFONTW lf = { 0 };
 	GetObjectW(font, sizeof(LOGFONTW), &lf);
 	
-	if (lstrcmpW(buffer, lf.lfFaceName))
+	if (lstrcmpW(iniBuffer, lf.lfFaceName))
 	{
 		msgBox = new MessageBoxPage(L"Loading the font specified in Console\\FontHeight in the config file failed. Panther2K will exit.", true, currentPage);
 		msgBox->ShowDialog();
@@ -564,8 +571,8 @@ bool WindowsSetup::LoadConfig()
 		return false;
 	}
 	
-	GetPrivateProfileStringW(L"Console", L"UseCodePage437", L"No", buffer, 4, INIFile);
-	UseCp437 = lstreqW(buffer, L"Yes");
+	GetPrivateProfileStringW(L"Console", L"UseCodePage437", L"No", iniBuffer, 4, INIFile);
+	UseCp437 = lstreqW(iniBuffer, L"Yes");
 
 	return true;
 }
@@ -755,7 +762,7 @@ int WindowsSetup::RunSetup()
 void WindowsSetup::LoadPhase(int phase)
 {
 	wchar_t logBuffer[MAX_PATH * 2];
-	swprintf_s(logBuffer, L"Starting phase %d.", phase);
+	swprintf_s(logBuffer, L"Starting phase %d...", phase);
 	logger->Write(PANTHER_LL_DETAILED, logBuffer);
 
 	Page* page;
@@ -774,8 +781,11 @@ void WindowsSetup::LoadPhase(int phase)
 			// If the image count is not -1 we have already loaded the image
 			if (WimImageCount == -1)
 			{
+				logger->Write(PANTHER_LL_NORMAL, L"Reading WIM information...");
 				GetWimImageCount();
 				EnumerateImageInfo();
+				swprintf_s(logBuffer, L"The WIM file has %d images.", WimImageCount);
+				logger->Write(PANTHER_LL_VERBOSE, logBuffer);
 			}
 			if (WimImageCount != 1)
 			{
@@ -1110,7 +1120,10 @@ int EndsWith(const wchar_t* str, const wchar_t* suffix)
 
 bool WindowsSetup::LoadWimFile()
 {
+	wchar_t path[MAX_PATH];
 	unsigned int flags = EndsWith(WimFile, L".esd") ? WIM_FLAG_SOLIDCOMPRESSION : 0;
+	wsprintfW(path, L"Loading file '%s' (%s)...", WimFile, flags ? L"solid" : L"not solid");
+	logger->Write(PANTHER_LL_DETAILED, path);
 	for (int compression = WIM_COMPRESS_NONE; compression <= WIM_COMPRESS_LZMS; compression++) 
 	{
 		WimHandle = WIMCreateFile(WimFile, WIM_GENERIC_READ, WIM_OPEN_EXISTING, flags, compression, NULL);
@@ -1118,10 +1131,11 @@ bool WindowsSetup::LoadWimFile()
 	}
 	if (!WimHandle)
 	{
+		wsprintfW(path, L"WimCreateFile failed: (0x%08x).", MAKE_HRESULT(SEVERITY_ERROR, FACILITY_WIN32, GetLastError()));
+		logger->Write(PANTHER_LL_BASIC, path);
 		return false;
 	}
 
-	wchar_t path[MAX_PATH];
 	GetTempPathW(MAX_PATH, path);
 	WIMSetTemporaryPath(WimHandle, path);
 	return true;

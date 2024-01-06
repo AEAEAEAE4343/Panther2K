@@ -24,6 +24,8 @@ namespace LibPanther
 			const wchar_t* output = L"Logger failed to initialize.";
 			WriteConsoleW(GetStdHandle(STD_OUTPUT_HANDLE), output, lstrlenW(output), NULL, NULL);
 		}
+		// Write LE UTF-16 byte order mark
+		WriteFile(hLogFile, "ÿþ", 2, NULL, NULL);
 	}
 
 	void Logger::Write(int level, const wchar_t* message)

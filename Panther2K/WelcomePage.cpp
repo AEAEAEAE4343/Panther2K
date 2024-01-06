@@ -43,7 +43,6 @@ bool WelcomePage::KeyHandler(WPARAM wParam)
 	case VK_RETURN:
 		statusText = L"  Please wait while Setup loads data...";
 		Draw();
-		WindowsSetup::LoadWimFile();
 		WindowsSetup::LoadPhase(2);
 		break;
 	case (WPARAM)'R':

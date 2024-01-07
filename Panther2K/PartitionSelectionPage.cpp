@@ -166,7 +166,7 @@ void PartitionSelectionPage::EnumeratePartitions()
 		free(vde);
 		free(dli);
 		memcpy(vi.fileSystem, fileSystemName, sizeof(wchar_t) * (MAX_PATH + 1));
-		lstrcpyW(vi.guid, szNextVolName);
+		lstrcpyW(vi.guid, szNextVolNameNoBSlash);
 		volumeInfo.push_back(vi);
 	cleanup:
 		CloseHandle(volumeFileHandle);

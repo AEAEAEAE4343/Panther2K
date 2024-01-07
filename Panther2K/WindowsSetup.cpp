@@ -131,7 +131,8 @@ bool WindowsSetup::LoadPartitionFromMount(const wchar_t* buffer, const wchar_t**
 	memcpy(partition, buffer + 1, c * sizeof(wchar_t));
 	*destMount = partition;
 	wchar_t* tempVolume = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * 50);
-	GetVolumeNameForVolumeMountPointW(WindowsSetup::Partition1Mount, tempVolume, 50);
+	GetVolumeNameForVolumeMountPointW(*destMount, tempVolume, 50);
+	tempVolume[lstrlenW(tempVolume) - 1] = '\x0';
 	*destVolume = tempVolume;
 	return true;
 }
@@ -211,6 +212,8 @@ bool WindowsSetup::LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootP
 			return false;
 		}
 	}
+
+	(const_cast<wchar_t*>(*destVolume))[lstrlenW(*destVolume) - 1] = '\x0';
 }
 
 bool FileExists(const wchar_t* szPath)

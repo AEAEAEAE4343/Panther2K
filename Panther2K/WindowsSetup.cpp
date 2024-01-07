@@ -825,7 +825,7 @@ void WindowsSetup::LoadPhase(int phase)
 		// Generate boot manager files and BCD
 		page = new BootPreparationPage();
 		LoadPage(page);
-		((BootPreparationPage*)page)->PrepareBootFiles();
+		((BootPreparationPage*)page)->PrepareBootFilesNew();
 		// Doing this is going to produce the following call stack:
 		//   
 		//   WindowsSetup::RunSetup()
@@ -855,9 +855,8 @@ void WindowsSetup::LoadPhase(int phase)
 bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 {
 	// Try loading WinParted
-	typedef int (*RunWinParted)(Console*);
 	typedef void (*InitializeCRT)();
-	typedef HRESULT(*ApplyP2KLayoutToDiskGPT)(Console*, int, bool, wchar_t***);
+	typedef HRESULT(*ApplyP2KLayoutToDiskGPT)(Console*, LibPanther::Logger*, int, bool, wchar_t***, wchar_t***);
 
 	auto winParted = LoadLibraryA("WinParted.exe");
 	if (!winParted) 
@@ -881,8 +880,12 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 	for (int i = 0; i < 3; i++)
 		mountPoints[i] = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * MAX_PATH);
 
+	wchar_t** volumeList = (wchar_t**)safeMalloc(logger, sizeof(wchar_t*) * 3);
+	for (int i = 0; i < 3; i++)
+		volumeList[i] = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * MAX_PATH);
+
 	auto applyLayout = (ApplyP2KLayoutToDiskGPT)GetProcAddress(winParted, (LPCSTR)1);
-	HRESULT res = applyLayout(console, diskNumber, IsWinPE, &mountPoints);
+	HRESULT res = applyLayout(console, logger, diskNumber, IsWinPE, &mountPoints, &volumeList);
 
 	if (res != ERROR_SUCCESS)
 	{
@@ -906,6 +909,7 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 			wcscat_s(mountPoints[0], MAX_PATH, L":\\");
 		}
 		Partition1Mount = mountPoints[0];
+		Partition1Volume = volumeList[0];
 
 		// Recovery
 		if (lstrlenW(mountPoints[2]) == 1)
@@ -913,6 +917,7 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 			wcscat_s(mountPoints[2], MAX_PATH, L":\\");
 		}
 	    Partition2Mount = mountPoints[2];
+		Partition2Volume = volumeList[2];
 
 		// Windows
 		if (lstrlenW(mountPoints[1]) == 1)
@@ -920,6 +925,7 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 			wcscat_s(mountPoints[1], MAX_PATH, L":\\");
 		}
 		Partition3Mount = mountPoints[1];
+		Partition3Volume = volumeList[1];
 
 		currentPage->Draw();
 		return true;
@@ -1105,6 +1111,34 @@ void WindowsSetup::LoadPage(Page* page)
 
 	page->Initialize(console);
 	currentPage = page;
+}
+
+//__declspec(dllexport) bool SetPartType(Console* console, int diskNumber, unsigned long long partOffset, short partType) 
+bool WindowsSetup::SetPartitionType(int disk, unsigned long long offset, short type)
+{
+	// Try loading WinParted
+	typedef void (*InitializeCRT)();
+	typedef bool(*SetPartType)(Console*, LibPanther::Logger*, int, unsigned long long, short);
+
+	auto winParted = LoadLibraryA("WinParted.exe");
+	if (!winParted)
+	{
+		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occured while preparing the disk. WinParted could not be loaded.", false, currentPage);
+		msgBox->ShowDialog();
+		delete msgBox;
+		return false;
+	}
+
+	if (!isPartedLoaded)
+	{
+		ParseIAT(winParted);
+		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, (LPCSTR)2);
+		initializeCRT();
+		isPartedLoaded = true;
+	}
+
+	auto setType = (SetPartType)GetProcAddress(winParted, (LPCSTR)4);
+	return setType(console, logger, disk, offset, type);
 }
 
 int EndsWith(const wchar_t* str, const wchar_t* suffix)

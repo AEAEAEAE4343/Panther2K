@@ -30,6 +30,8 @@ bool PartitionManager::CurrentDiskPartitionTableDestroyed = 0;
 long PartitionManager::CurrentDiskFirstAvailablePartition = 0;
 PartitionInformation PartitionManager::CurrentPartition = { 0 };
 
+bool PartitionManager::ShowNoInfoDialogs = false;
+
 Console* PartitionManager::currentConsole = 0;
 Page* PartitionManager::CurrentPage = 0;
 std::stack<Page*> PartitionManager::pageStack = std::stack<Page*>();
@@ -59,8 +61,16 @@ __declspec(dllexport) int RunWinParted(Console* console, LibPanther::Logger* log
 	return result;
 };
 
-__declspec(dllexport) HRESULT ApplyP2KLayoutToDiskGPT(Console* console, LibPanther::Logger* logger, int diskNumber, bool letters, wchar_t*** mountPath)
+// TODO: Cleanup this mess
+__declspec(dllexport) HRESULT ApplyP2KLayoutToDiskGPT(Console* console, LibPanther::Logger* logger, int diskNumber, bool letters, wchar_t*** mountPath, wchar_t*** volumeList)
 {
+	HRESULT ret;
+	PartitionManager::ShowNoInfoDialogs = true;
+	goto start;
+exit:
+	PartitionManager::ShowNoInfoDialogs = false;
+	return ret;
+start:
 	PartitionManager::SetConsole(console);
 
 	// Show loading screen
@@ -69,7 +79,10 @@ __declspec(dllexport) HRESULT ApplyP2KLayoutToDiskGPT(Console* console, LibPanth
 	PartitionManager::CurrentPage->Update();
 
 	if (PartitionManager::ShowMessagePage(L"Warning: All data on the drive will be lost and a new partition table will be written. Would you like to continue?", MessagePageType::YesNo, MessagePageUI::Warning) != MessagePageResult::Yes)
-		return ERROR_CANCELLED;
+	{
+		ret = ERROR_CANCELED;
+		goto exit;
+	}
 
 	HRESULT hResult;
 
@@ -79,11 +92,17 @@ __declspec(dllexport) HRESULT ApplyP2KLayoutToDiskGPT(Console* console, LibPanth
 		if (PartitionManager::DiskInformationTable[i].DiskNumber == diskNumber)
 			PartitionManager::CurrentDisk = PartitionManager::DiskInformationTable[diskNumber];
 	if (PartitionManager::CurrentDisk.DiskNumber == -1)
-		return ERROR_FILE_NOT_FOUND;
+	{
+		ret = ERROR_FILE_NOT_FOUND;
+		goto exit;
+	}
 
 	wchar_t rootCwdPath[MAX_PATH];
 	if (_wgetcwd(rootCwdPath, MAX_PATH) == NULL)
-		return ERROR_PATH_NOT_FOUND;
+	{
+		ret = ERROR_PATH_NOT_FOUND;
+		goto exit;
+	}
 
 	PathStripToRootW(rootCwdPath);
 	
@@ -110,8 +129,11 @@ __declspec(dllexport) HRESULT ApplyP2KLayoutToDiskGPT(Console* console, LibPanth
 			drives <<= 1;
 		}
 
-		if (mountIndex != 3)
-			return ERROR_BUSY;
+		if (mountIndex != 3) 
+		{
+			ret = ERROR_BUSY;
+			goto exit;
+		}
 	}
 	else 
 	{
@@ -122,7 +144,11 @@ __declspec(dllexport) HRESULT ApplyP2KLayoutToDiskGPT(Console* console, LibPanth
 		for (int i = 0; i < 3; i++)
 		{
 			hResult = SHCreateDirectoryExW(NULL, (*mountPath)[i], NULL);
-			if (hResult != ERROR_SUCCESS && hResult != ERROR_ALREADY_EXISTS) return hResult;
+			if (hResult != ERROR_SUCCESS && hResult != ERROR_ALREADY_EXISTS) 
+			{
+				ret = hResult;
+				goto exit;
+			}
 		}
 	}
 
@@ -158,9 +184,45 @@ __declspec(dllexport) HRESULT ApplyP2KLayoutToDiskGPT(Console* console, LibPanth
 	wcscpy_s(layout->Partitions[3].FileSystem, L"NTFS");
 	layout->Partitions[3].MountPoint = (*mountPath)[2];
 
-	HRESULT ret = PartitionManager::ApplyPartitionLayoutGPT(layout);
+	ret = PartitionManager::ApplyPartitionLayoutGPT(layout);
+	int volIndex = 0;
+	for (int i = 0; i < 4; i++) 
+	{
+		if (i == 1) continue;
+		PartitionManager::LoadPartition(&PartitionManager::CurrentDiskPartitions[i]);
+		lstrcpyW((*volumeList)[volIndex++], PartitionManager::CurrentPartition.VolumeInformation.VolumeFile);
+	}
 	free(layout);
-	return ret;
+	goto exit;
+}
+
+__declspec(dllexport) bool SetPartType(Console* console, LibPanther::Logger* logger, int diskNumber, unsigned long long partOffset, short partType) 
+{
+	PartitionManager::SetConsole(console);
+	PartitionManager::ShowNoInfoDialogs = true;
+
+	PartitionManager::PopulateDiskInformation();
+	if (!PartitionManager::LoadDisk(&PartitionManager::DiskInformationTable[diskNumber])) goto retFalse;
+	bool loaded = false;
+	for (int i = 0; i < PartitionManager::CurrentDiskPartitionCount; i++) 
+	{
+		if (PartitionManager::CurrentDiskPartitions[i].StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize == partOffset)
+		{
+			if (!PartitionManager::LoadPartition(&PartitionManager::CurrentDiskPartitions[i]))
+				goto retFalse;
+			loaded = true;
+			break;
+		}
+	}
+	if (!loaded) goto retFalse;
+	if (!PartitionManager::SetCurrentPartitionType(partType)) goto retFalse;
+	if (!PartitionManager::SavePartitionTableToDisk()) goto retFalse;
+
+	PartitionManager::ShowNoInfoDialogs = false;
+	return true;
+retFalse:
+	PartitionManager::ShowNoInfoDialogs = false;
+	return false;
 }
 
 int PartitionManager::RunWinParted(Console* console)
@@ -230,6 +292,9 @@ void PartitionManager::PopPage()
 
 MessagePageResult PartitionManager::ShowMessagePage(const wchar_t* message, MessagePageType type, MessagePageUI uiStyle)
 {
+	if (ShowNoInfoDialogs && uiStyle == MessagePageUI::Normal)
+		return MessagePageResult::OK;
+
 	if (!wcsstr(message, L"%s"))
 	{
 		MessagePage* msgp = new MessagePage(currentConsole, message, type, uiStyle);
@@ -1117,6 +1182,7 @@ bool PartitionManager::LoadPartition(PartitionInformation* partition)
 					if (!GetVolumeInformationByHandleW(hVolume, CurrentPartition.VolumeInformation.VolumeName, 128, NULL, NULL, NULL, CurrentPartition.VolumeInformation.FileSystem, 16))
 						goto fail;
 
+					lstrcpyW(CurrentPartition.VolumeInformation.VolumeFile, szVolumeName);
 					CurrentPartition.VolumeLoaded = true;
 					goto cleanup;
 				}

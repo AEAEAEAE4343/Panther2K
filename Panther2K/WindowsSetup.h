@@ -32,6 +32,8 @@ public:
 	static bool KeyHandler(WPARAM wParam);
 	static void LoadPage(Page* page);
 
+	static bool SetPartitionType(int disk, unsigned long long offset, short type);
+
 	static void LoadDrivers();
 	static bool LoadWimFile();
 	static void GetWimImageCount();

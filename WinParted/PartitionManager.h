@@ -137,6 +137,7 @@ public:
 	static long CalculateCRC32(char* data, unsigned long long length);
 
 	static Page* CurrentPage;
+	static bool ShowNoInfoDialogs;
 private:
 	static Console* currentConsole;
 	static Page* nextPage;

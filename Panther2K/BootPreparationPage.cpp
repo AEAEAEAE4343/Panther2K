@@ -4,6 +4,55 @@
 #include "shlobj.h"
 #include "MessageBoxPage.h"
 
+BOOL SetPrivilege(
+	HANDLE hToken,              // access token handle
+	LPCWSTR nameOfPrivilege,   // name of privilege to enable/disable
+	BOOL bEnablePrivilege     // to enable or disable privilege
+)
+{
+	TOKEN_PRIVILEGES tp;
+	LUID luid;
+
+	if (!LookupPrivilegeValue(
+		NULL,               // lookup privilege on local system
+		nameOfPrivilege,   // privilege to lookup 
+		&luid))           // receives LUID of privilege
+	{
+		printf("LookupPrivilegeValue error: %u\n", GetLastError());
+		return FALSE;
+	}
+
+	tp.PrivilegeCount = 1;
+	tp.Privileges[0].Luid = luid;
+	if (bEnablePrivilege)
+		tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+	else
+		tp.Privileges[0].Attributes = 0;
+
+	// Enable the privilege or disable all privileges.
+
+	if (!AdjustTokenPrivileges(
+		hToken,
+		FALSE,
+		&tp,
+		sizeof(TOKEN_PRIVILEGES),
+		(PTOKEN_PRIVILEGES)NULL,
+		(PDWORD)NULL))
+	{
+		printf("AdjustTokenPrivileges error: %u\n", GetLastError());
+		return FALSE;
+	}
+
+	if (GetLastError() == ERROR_NOT_ALL_ASSIGNED)
+
+	{
+		printf("The token does not have the specified privilege. \n");
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
 BootPreparationPage::~BootPreparationPage()
 {
 	free((wchar_t*)text);
@@ -167,7 +216,7 @@ end:
 	Wow64RevertWow64FsRedirection(wow64State);
 	return;
 fail:
-	wprintf(errorMessage);
+	WindowsSetup::GetLogger()->Write(PANTHER_LL_BASIC, errorMessage);
 	MessageBoxPage* msgBox = new MessageBoxPage(errorMessage, true, this);
 	msgBox->ShowDialog();
 	delete msgBox;
@@ -197,6 +246,39 @@ void BootPreparationPage::PrepareBootFilesNew()
 	*/
 
 	/*
+	* Determine if Partition1 and Partition3 are on the same disk
+	* (i.e. If the system partition is on the same disk as the boot partition.)
+	* 
+	* If they are, a different bcdedit flag (hd_partition=) must be used,
+	* otherwise the BCD might reference a VHD file that is actually mounted
+	* in the VM instead of the partitions themselves.
+	* 
+	* This was found during test installs on a VHD. It ouright refused to 
+	* boot until I realized it was trying to find a non-existent VHD.
+	*/
+
+	VOLUME_DISK_EXTENTS* vde = (VOLUME_DISK_EXTENTS*)safeMalloc(WindowsSetup::GetLogger(), sizeof(VOLUME_DISK_EXTENTS));
+
+	HANDLE volumeFileHandleP1 = CreateFileW(WindowsSetup::Partition1Volume, FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
+	if (volumeFileHandleP1 == INVALID_HANDLE_VALUE)
+		return;
+	HANDLE volumeFileHandleP3 = CreateFileW(WindowsSetup::Partition3Volume, FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
+	if (volumeFileHandleP3 == INVALID_HANDLE_VALUE)
+		return;
+
+	DWORD bytesCopied;
+	if (!DeviceIoControl(volumeFileHandleP1, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, vde, sizeof(VOLUME_DISK_EXTENTS), &bytesCopied, NULL))
+		return;
+	int p1Disk = vde->Extents[0].DiskNumber;
+	unsigned long long p1Offset = vde->Extents[0].StartingOffset.QuadPart;
+	if (!DeviceIoControl(volumeFileHandleP1, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, vde, sizeof(VOLUME_DISK_EXTENTS), &bytesCopied, NULL))
+		return;
+	bool singleDisk = p1Disk == vde->Extents[0].DiskNumber;
+	CloseHandle(volumeFileHandleP1);
+	CloseHandle(volumeFileHandleP3);
+	free(vde);
+
+	/*
 	* Copy boot files
 	*/
 
@@ -205,6 +287,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	fos.wFunc = FO_COPY;
 	fos.pFrom = pathBuffers[0];
 	fos.pTo = pathBuffers[1];
+	fos.fFlags = FOF_NO_UI;
 
 	swprintf_s(pathBuffers[0], WindowsSetup::UseLegacy ? L"%sWindows\\Boot\\PCAT\\*"
 													   : L"%sWindows\\Boot\\EFI\\*", WindowsSetup::Partition3Mount);
@@ -291,8 +374,11 @@ void BootPreparationPage::PrepareBootFilesNew()
 		* Configure Windows Boot Manager entry
 		*/
 		// device = s:
-		swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /set {bootmgr} device partition=%s"
-														  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {bootmgr} device partition=%s", WindowsSetup::Partition1Mount, WindowsSetup::Partition1Mount);
+		swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {bootmgr} device %s%s",
+			WindowsSetup::Partition1Mount,
+			WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD",
+			singleDisk ? L"hd_partition=" : L"partition=",
+			WindowsSetup::Partition1Mount);
 		if (_wsystem(commandBuffer))
 		{
 			// Failed
@@ -386,16 +472,22 @@ void BootPreparationPage::PrepareBootFilesNew()
 		return;
 	}
 	// osdevice = W:
-	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /set {default} osdevice partition=%s"
-													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {default} osdevice partition=%s", WindowsSetup::Partition1Mount, WindowsSetup::Partition3Mount);
+	swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {default} osdevice %s%s",
+		WindowsSetup::Partition1Mount,
+		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD",
+		singleDisk ? L"hd_partition=" : L"partition=",
+		WindowsSetup::Partition3Mount);
 	if (_wsystem(commandBuffer))
 	{
 		// Failed
 		return;
 	}
 	// device = W:
-	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /set {default} device partition=%s"
-													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {default} device partition=%s", WindowsSetup::Partition1Mount, WindowsSetup::Partition3Mount);
+	swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {default} device %s%s",
+		WindowsSetup::Partition1Mount,
+		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD",
+		singleDisk ? L"hd_partition=" : L"partition=",
+		WindowsSetup::Partition3Mount);
 	if (_wsystem(commandBuffer))
 	{
 		// Failed
@@ -418,11 +510,72 @@ void BootPreparationPage::PrepareBootFilesNew()
 		return;
 	}
 
+	// Set a name and display order, otherwise Boot Manager will refuse to boot the entry
+	swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {default} description \"Windows\"",
+		WindowsSetup::Partition1Mount,
+		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD");
+
+	if (_wsystem(commandBuffer))
+	{
+		// Failed
+		return;
+	}
+
+	swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {bootmgr} displayorder {default}",
+		WindowsSetup::Partition1Mount,
+		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD");
+
+	if (_wsystem(commandBuffer))
+	{
+		// Failed
+		return;
+	}
+
 	/*
 	* Configure boot sector for Legacy
 	*/
-	if (!WindowsSetup::UseLegacy)
+
+	/*
+	* Convert the hive into a system hive
+	* This is done through the registry as bcdedit does not allow this
+	* This is REQUIRED for bcdedit to work in the installed system 
+	* and thus for sysprep to succeed in specializing the system
+	*/
+
+	// Enable registry access first
+	HANDLE proccessHandle = GetCurrentProcess();
+	DWORD typeOfAccess = TOKEN_ADJUST_PRIVILEGES;
+	HANDLE tokenHandle;
+	if (OpenProcessToken(proccessHandle, typeOfAccess, &tokenHandle))
+	{
+		// Enabling RESTORE and BACKUP privileges
+		SetPrivilege(tokenHandle, SE_RESTORE_NAME, TRUE);
+		SetPrivilege(tokenHandle, SE_BACKUP_NAME, TRUE);
+	}
+	else
+	{
+		// Failed
 		return;
+	}
+
+	// Set the settings for system hives
+	LSTATUS status;
+	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"%sBoot\\BCD" : L"%sEFI\\Microsoft\\Boot\\BCD", WindowsSetup::Partition1Mount);
+	HKEY bcdKey;
+	status = RegLoadKeyW(HKEY_LOCAL_MACHINE, L"p2k_bcd", commandBuffer);
+	status = RegOpenKeyW(HKEY_LOCAL_MACHINE, L"p2k_bcd", &bcdKey);
+	status = RegDeleteKeyValueW(bcdKey, L"Description", L"FirmwareModified");
+	DWORD value = 1;
+	status = RegSetKeyValueW(bcdKey, L"Description", L"System", REG_DWORD, &value, sizeof(DWORD));
+	status = RegSetKeyValueW(bcdKey, L"Description", L"TreatAsSystem", REG_DWORD, &value, sizeof(DWORD));
+	status = RegFlushKey(bcdKey);
+	status = RegUnLoadKeyW(HKEY_LOCAL_MACHINE, L"p2k_bcd");
+
+	/*
+	* Set partition type for EFI or System partition
+	* This is REQUIRED for sysprep to succeed
+	*/
+	WindowsSetup::SetPartitionType(p1Disk, p1Offset, WindowsSetup::UseLegacy ? 0x2700 : 0xef00);
 }
 
 void BootPreparationPage::Init()

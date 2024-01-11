@@ -22,6 +22,12 @@ using namespace Gdiplus;
 // Undocumented WIMGAPI flag, loads the file with solid compression
 #define WIM_FLAG_SOLIDCOMPRESSION 0x20000000
 
+#define ORD_InitializeCRT           (LPCSTR)3
+#define ORD_RunWinParted            (LPCSTR)4
+#define ORD_SetPartType             (LPCSTR)5
+#define ORD_ApplyP2KLayoutToDiskGPT (LPCSTR)1
+#define ORD_ApplyP2KLayoutToDiskMBR (LPCSTR)2
+
 // Config
 bool WindowsSetup::UseCp437 = false;
 bool WindowsSetup::CanGoBack = true;
@@ -592,11 +598,11 @@ int WindowsSetup::RunPartitionManager()
 	if (!isPartedLoaded)
 	{
 		ParseIAT(winParted);
-		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, (LPCSTR)2);
+		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, ORD_InitializeCRT);
 		initializeCRT();
 	}
 
-	auto runWinParted = (RunWinParted)GetProcAddress(winParted, (LPCSTR)3);
+	auto runWinParted = (RunWinParted)GetProcAddress(winParted, ORD_RunWinParted);
 	runWinParted(console, logger);
 
 	currentPage->Draw();
@@ -744,9 +750,10 @@ int WindowsSetup::RunSetup()
 	// WinPE is unsupported currently
 	UseCp437 = false;
 	IsWinPE = true;
+	SkipPhase3 = false;
 
 	logger->Write(PANTHER_LL_NORMAL, L"Finished initialization.");
-
+	
 	// Start welcome phase
 	LoadPhase(1);
 
@@ -859,7 +866,8 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 {
 	// Try loading WinParted
 	typedef void (*InitializeCRT)();
-	typedef HRESULT(*ApplyP2KLayoutToDiskGPT)(Console*, LibPanther::Logger*, int, bool, wchar_t***, wchar_t***);
+	typedef HRESULT(*ApplyP2KLayoutToDisk)(Console*, LibPanther::Logger*, int, bool, wchar_t***, wchar_t***);
+	typedef HRESULT(*ApplyP2KLayoutToDisk)(Console*, LibPanther::Logger*, int, bool, wchar_t***, wchar_t***);
 
 	auto winParted = LoadLibraryA("WinParted.exe");
 	if (!winParted) 
@@ -873,7 +881,7 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 	if (!isPartedLoaded)
 	{
 		ParseIAT(winParted);
-		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, (LPCSTR)2);
+		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, ORD_InitializeCRT);
 		initializeCRT();
 		isPartedLoaded = true;
 	}
@@ -887,7 +895,7 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 	for (int i = 0; i < 3; i++)
 		volumeList[i] = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * MAX_PATH);
 
-	auto applyLayout = (ApplyP2KLayoutToDiskGPT)GetProcAddress(winParted, (LPCSTR)1);
+	auto applyLayout = (ApplyP2KLayoutToDisk)GetProcAddress(winParted, UseLegacy ? ORD_ApplyP2KLayoutToDiskMBR : ORD_ApplyP2KLayoutToDiskGPT);
 	HRESULT res = applyLayout(console, logger, diskNumber, IsWinPE, &mountPoints, &volumeList);
 
 	if (res != ERROR_SUCCESS)
@@ -1135,12 +1143,12 @@ bool WindowsSetup::SetPartitionType(int disk, unsigned long long offset, short t
 	if (!isPartedLoaded)
 	{
 		ParseIAT(winParted);
-		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, (LPCSTR)2);
+		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, ORD_InitializeCRT);
 		initializeCRT();
 		isPartedLoaded = true;
 	}
 
-	auto setType = (SetPartType)GetProcAddress(winParted, (LPCSTR)4);
+	auto setType = (SetPartType)GetProcAddress(winParted, ORD_SetPartType);
 	return setType(console, logger, disk, offset, type);
 }
 

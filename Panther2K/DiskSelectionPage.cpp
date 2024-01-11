@@ -1,5 +1,6 @@
 #include "DiskSelectionPage.h"
 #include "WindowsSetup.h"
+#include "QuitingPage.h"
 
 void GetSizeStringFromBytes(unsigned long long bytes, wchar_t buffer[10])
 {
@@ -27,7 +28,7 @@ void DiskSelectionPage::Init()
 	memcpy(textBuffer, displayName, length * sizeof(wchar_t));
 	memcpy(textBuffer + length, L" Setup", 14);
 	text = textBuffer;
-	statusText = L"";
+	statusText = L"  ENTER=Select  ESC=Back  F3=Quit";
 
 	HANDLE diskFileHandle;
 	DWORD byteCount;
@@ -178,6 +179,9 @@ bool DiskSelectionPage::KeyHandler(WPARAM wParam)
 			if (WindowsSetup::SelectPartitionsWithDisk(diskInfo[selectionIndex].diskNumber))
 				WindowsSetup::LoadPhase(5);
 		}
+		break;
+	case VK_F3:
+		AddPopup(new QuitingPage());
 		break;
 	}
 	return true;

@@ -41,7 +41,7 @@ struct PartitionType
 	const wchar_t* display_name;
 };
 
-struct WP_GPT_PART_DESCRIPTION
+struct WP_PART_DESCRIPTION
 {
 	int PartitionNumber;
 	short PartitionType;
@@ -50,10 +50,10 @@ struct WP_GPT_PART_DESCRIPTION
 	const wchar_t* MountPoint;
 };
 
-struct WP_GPT_LAYOUT
+struct WP_PART_LAYOUT
 {
 	int PartitionCount;
-	WP_GPT_PART_DESCRIPTION Partitions[1];
+	WP_PART_DESCRIPTION Partitions[1];
 };
 
 #define PartitionTypeCount 224
@@ -94,7 +94,8 @@ public:
 	static bool LoadPartitionTable();
 	static bool SavePartitionTableToDisk();
 	static bool DeletePartition(PartitionInformation* partInfo);
-	static HRESULT ApplyPartitionLayoutGPT(WP_GPT_LAYOUT* layout);
+	static HRESULT ApplyPartitionLayoutGPT(WP_PART_LAYOUT* layout);
+	static HRESULT ApplyPartitionLayoutMBR(WP_PART_LAYOUT* layout);
 
 	static DISK_INFORMATION* DiskInformationTable;
 	static long DiskInformationTableSize;

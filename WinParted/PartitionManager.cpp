@@ -80,7 +80,7 @@ start:
 
 	if (PartitionManager::ShowMessagePage(L"Warning: All data on the drive will be lost and a new partition table will be written. Would you like to continue?", MessagePageType::YesNo, MessagePageUI::Warning) != MessagePageResult::Yes)
 	{
-		ret = ERROR_CANCELED;
+		ret = ERROR_CANCELLED;
 		goto exit;
 	}
 
@@ -153,8 +153,8 @@ start:
 	}
 
 	int totalPartitions = 4;
-	long structSize = (sizeof(WP_GPT_LAYOUT) + ((totalPartitions - 1) * sizeof(WP_GPT_PART_DESCRIPTION)));
-	WP_GPT_LAYOUT* layout = (WP_GPT_LAYOUT*)malloc(structSize);
+	long structSize = (sizeof(WP_PART_LAYOUT) + ((totalPartitions - 1) * sizeof(WP_PART_DESCRIPTION)));
+	WP_PART_LAYOUT* layout = (WP_PART_LAYOUT*)malloc(structSize);
 	ZeroMemory(layout, structSize);
 	layout->PartitionCount = totalPartitions;
 
@@ -196,6 +196,134 @@ start:
 	goto exit;
 }
 
+__declspec(dllexport) HRESULT ApplyP2KLayoutToDiskMBR(Console* console, LibPanther::Logger* logger, int diskNumber, bool letters, wchar_t*** mountPath, wchar_t*** volumeList)
+{
+	HRESULT ret;
+	PartitionManager::ShowNoInfoDialogs = true;
+	goto start;
+exit:
+	PartitionManager::ShowNoInfoDialogs = false;
+	return ret;
+start:
+	PartitionManager::SetConsole(console);
+
+	// Show loading screen
+	PartitionManager::CurrentPage = new Page();
+	PartitionManager::CurrentPage->Initialize(console);
+	PartitionManager::CurrentPage->Update();
+
+	if (PartitionManager::ShowMessagePage(L"Warning: All data on the drive will be lost and a new partition table will be written. Would you like to continue?", MessagePageType::YesNo, MessagePageUI::Warning) != MessagePageResult::Yes)
+	{
+		ret = ERROR_CANCELLED;
+		goto exit;
+	}
+
+	HRESULT hResult;
+
+	PartitionManager::PopulateDiskInformation();
+	PartitionManager::CurrentDisk.DiskNumber = -1;
+	for (int i = 0; i < PartitionManager::DiskInformationTableSize; i++)
+		if (PartitionManager::DiskInformationTable[i].DiskNumber == diskNumber)
+			PartitionManager::CurrentDisk = PartitionManager::DiskInformationTable[diskNumber];
+	if (PartitionManager::CurrentDisk.DiskNumber == -1)
+	{
+		ret = ERROR_FILE_NOT_FOUND;
+		goto exit;
+	}
+
+	wchar_t rootCwdPath[MAX_PATH];
+	if (_wgetcwd(rootCwdPath, MAX_PATH) == NULL)
+	{
+		ret = ERROR_PATH_NOT_FOUND;
+		goto exit;
+	}
+
+	PathStripToRootW(rootCwdPath);
+
+	for (int i = 0; i < 3; i++)
+	{
+		wcscpy_s((*mountPath)[i], MAX_PATH, rootCwdPath);
+	}
+
+	if (letters)
+	{
+		int mountIndex = 0;
+		DWORD drives = GetLogicalDrives();
+		const wchar_t* letters = L"ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+		for (int i = 25; i >= 0 && mountIndex < 3; i--)
+		{
+			if (drives ^ 0b10000000000000000000000000
+				&& letters[i] != L'X'
+				&& letters[i] != L'A'
+				&& letters[i] != L'B')
+			{
+				(*mountPath)[mountIndex][0] = letters[i];
+				(*mountPath)[mountIndex++][1] = L'\0';
+			}
+			drives <<= 1;
+		}
+
+		if (mountIndex != 3)
+		{
+			ret = ERROR_BUSY;
+			goto exit;
+		}
+	}
+	else
+	{
+		wcscat_s((*mountPath)[0], MAX_PATH, L"$Panther2K\\Sys\\");
+		wcscat_s((*mountPath)[1], MAX_PATH, L"$Panther2K\\Win\\");
+		wcscat_s((*mountPath)[2], MAX_PATH, L"$Panther2K\\Rec\\");
+
+		for (int i = 0; i < 3; i++)
+		{
+			hResult = SHCreateDirectoryExW(NULL, (*mountPath)[i], NULL);
+			if (hResult != ERROR_SUCCESS && hResult != ERROR_ALREADY_EXISTS)
+			{
+				ret = hResult;
+				goto exit;
+			}
+		}
+	}
+
+	int totalPartitions = 3;
+	long structSize = (sizeof(WP_PART_LAYOUT) + ((totalPartitions - 1) * sizeof(WP_PART_DESCRIPTION)));
+	WP_PART_LAYOUT* layout = (WP_PART_LAYOUT*)malloc(structSize);
+	ZeroMemory(layout, structSize);
+	layout->PartitionCount = totalPartitions;
+
+	layout->Partitions[0].PartitionNumber = 1;
+	layout->Partitions[0].PartitionType = 0x0780;
+	if (PartitionManager::CurrentDisk.SectorSize == 4096)
+		wcscpy_s(layout->Partitions[0].PartitionSize, L"500M");
+	else
+		wcscpy_s(layout->Partitions[0].PartitionSize, L"150M");
+	wcscpy_s(layout->Partitions[0].FileSystem, L"NTFS");
+	layout->Partitions[0].MountPoint = (*mountPath)[0];
+
+	layout->Partitions[1].PartitionNumber = 2;
+	layout->Partitions[1].PartitionType = 0x0700;
+	wcscpy_s(layout->Partitions[1].PartitionSize, L"100%");
+	wcscpy_s(layout->Partitions[1].FileSystem, L"NTFS");
+	layout->Partitions[1].MountPoint = (*mountPath)[1];
+
+	layout->Partitions[2].PartitionNumber = 3;
+	layout->Partitions[2].PartitionType = 0x0700;
+	wcscpy_s(layout->Partitions[2].PartitionSize, L"500M");
+	wcscpy_s(layout->Partitions[2].FileSystem, L"NTFS");
+	layout->Partitions[2].MountPoint = (*mountPath)[2];
+
+	ret = PartitionManager::ApplyPartitionLayoutMBR(layout);
+	int volIndex = 0;
+	for (int i = 0; i < 3; i++)
+	{
+		PartitionManager::LoadPartition(&PartitionManager::CurrentDiskPartitions[i]);
+		lstrcpyW((*volumeList)[volIndex++], PartitionManager::CurrentPartition.VolumeInformation.VolumeFile);
+	}
+	free(layout);
+	goto exit;
+}
+
 __declspec(dllexport) bool SetPartType(Console* console, LibPanther::Logger* logger, int diskNumber, unsigned long long partOffset, short partType) 
 {
 	PartitionManager::SetConsole(console);
@@ -203,18 +331,20 @@ __declspec(dllexport) bool SetPartType(Console* console, LibPanther::Logger* log
 
 	PartitionManager::PopulateDiskInformation();
 	if (!PartitionManager::LoadDisk(&PartitionManager::DiskInformationTable[diskNumber])) goto retFalse;
-	bool loaded = false;
-	for (int i = 0; i < PartitionManager::CurrentDiskPartitionCount; i++) 
 	{
-		if (PartitionManager::CurrentDiskPartitions[i].StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize == partOffset)
+		bool loaded = false;
+		for (int i = 0; i < PartitionManager::CurrentDiskPartitionCount; i++)
 		{
-			if (!PartitionManager::LoadPartition(&PartitionManager::CurrentDiskPartitions[i]))
-				goto retFalse;
-			loaded = true;
-			break;
+			if (PartitionManager::CurrentDiskPartitions[i].StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize == partOffset)
+			{
+				if (!PartitionManager::LoadPartition(&PartitionManager::CurrentDiskPartitions[i]))
+					goto retFalse;
+				loaded = true;
+				break;
+			}
 		}
+		if (!loaded) goto retFalse;
 	}
-	if (!loaded) goto retFalse;
 	if (!PartitionManager::SetCurrentPartitionType(partType)) goto retFalse;
 	if (!PartitionManager::SavePartitionTableToDisk()) goto retFalse;
 
@@ -230,7 +360,7 @@ int PartitionManager::RunWinParted(Console* console)
     // Prepare the console
     if (console == NULL)
     {
-		bool customConsole = false;
+		bool customConsole = true;
 		if (customConsole)
 		{
 			currentConsole = new CustomConsole();
@@ -720,6 +850,7 @@ bool PartitionManager::LoadPartitionTable()
 				continue;
 			}
 			pi = { 0 };
+			pi.DiskNumber = CurrentDisk.DiskNumber;
 			pi.PartitionNumber = i + 1;
 			pi.Type.SystemID = CurrentDiskMBR.PartitionTable[i].SystemID;
 			pi.StartLBA = LBA{ static_cast<unsigned long long>(CurrentDiskMBR.PartitionTable[i].StartLBA) };
@@ -917,7 +1048,7 @@ bool PartitionManager::DeletePartition(PartitionInformation* partInfo)
 	}
 }
 
-HRESULT PartitionManager::ApplyPartitionLayoutGPT(WP_GPT_LAYOUT* layout)
+HRESULT PartitionManager::ApplyPartitionLayoutGPT(WP_PART_LAYOUT* layout)
 {
 	DWORD dwSize;
 	HANDLE hDisk;
@@ -1082,6 +1213,165 @@ HRESULT PartitionManager::ApplyPartitionLayoutGPT(WP_GPT_LAYOUT* layout)
 	CurrentPage->Update();
 	HRESULT result = ERROR_SUCCESS;
 	for (int i = 0; i < layout->PartitionCount; i++) 
+	{
+		if (lstrcmpW(layout->Partitions[i].FileSystem, L"RAW"))
+		{
+			HRESULT res = FormatPartition(&CurrentDiskPartitions[i], layout->Partitions[i].FileSystem, layout->Partitions[i].MountPoint);
+			if (res != S_OK)
+			{
+				result = res;
+				break;
+			}
+		}
+	}
+	free(partitions);
+	return result;
+}
+
+HRESULT PartitionManager::ApplyPartitionLayoutMBR(WP_PART_LAYOUT* layout)
+{
+	DWORD dwSize;
+	HANDLE hDisk;
+
+	wprintf_s(L"Applying the following partition layout to disk %d:\n", CurrentDisk.DiskNumber);
+	for (int i = 0; i < layout->PartitionCount; i++)
+		if (layout->Partitions[i].MountPoint == NULL)
+			wprintf_s(L"%3d | %4hX | %5s | %s\n", layout->Partitions[i].PartitionNumber, layout->Partitions[i].PartitionType, layout->Partitions[i].FileSystem, layout->Partitions[i].PartitionSize);
+		else
+			wprintf_s(L"%3d | %4hX | %5s | %s | %s\n", layout->Partitions[i].PartitionNumber, layout->Partitions[i].PartitionType, layout->Partitions[i].FileSystem, layout->Partitions[i].PartitionSize, layout->Partitions[i].MountPoint);
+	wprintf_s(L"\n");
+
+	if (layout->PartitionCount > 4) 
+	{
+		wprintf_s(L"The supplied partition layout has too many partitions.");
+		return ERROR_INVALID_PARAMETER;
+	}
+
+	auto MakeCHS = [](unsigned short C, unsigned short H, unsigned short S)
+	{
+		char b1 = static_cast<char>(H);
+		char b2 = static_cast<char>(((C & 0b1100000000) >> 8) + (S & 0b111111));
+		char b3 = static_cast<char>(C * 0b11111111);
+
+		return CHS{ b1, b2, b3 };
+	};
+
+	// Create partition table
+	ZeroMemory(&CurrentDiskMBR, sizeof(MBR_HEADER));
+	CurrentDiskMBR.BootSignature = 0xAA55;
+	CurrentDiskMBR.PartitionTable[0].BootIndicator = 0;
+
+	const unsigned long blockSize = 2048;
+	unsigned long totalCapacity = CurrentDisk.SectorCount / blockSize;
+	unsigned long availableCapacity = totalCapacity - 1;
+
+	wprintf_s(L"Partitions will be aligned on %d sector blocks.\n\n", blockSize);
+	wprintf_s(L"Virtual sector size: %d bytes\n", CurrentDisk.SectorSize);
+	wprintf_s(L"Total capacity:      %d blocks\n", totalCapacity);
+	wprintf_s(L"Available space:     %d blocks\n\n", availableCapacity);
+	wprintf_s(L"Partition sizes of value-based-partitions in blocks:\n");
+
+	int partitionsParsed = 0;
+	PartitionInformation* partitions = reinterpret_cast<PartitionInformation*>(malloc(sizeof(PartitionInformation) * layout->PartitionCount));
+	ZeroMemory(partitions, sizeof(PartitionInformation) * layout->PartitionCount);
+	for (int i = 0; i < layout->PartitionCount; i++)
+	{
+		// Loop through value-based partitions (without %)
+		if (wcsstr(layout->Partitions[i].PartitionSize, L"%") != 0)
+			continue;
+
+		unsigned long long partitionSize;
+		wchar_t partitionSizeModifier;
+		swscanf_s(layout->Partitions[i].PartitionSize, L"%4lld%c", &partitionSize, &partitionSizeModifier);
+
+		const wchar_t* sizeModifiers = L"BKMGTPEZY";
+		int index = ((unsigned long long)wcschr(sizeModifiers, partitionSizeModifier) - (unsigned long long)sizeModifiers) / sizeof(wchar_t);
+		for (int j = 0; j < index; j++)
+			partitionSize *= 1024;
+		partitionSize /= CurrentDisk.SectorSize;
+		partitionSize /= blockSize;
+		availableCapacity -= partitionSize;
+
+		partitions[i].PartitionNumber = layout->Partitions[i].PartitionNumber;
+		partitions[i].SectorCount = partitionSize * blockSize;
+		partitions[i].Type.SystemID = layout->Partitions[i].PartitionType >> 8;
+		//memcpy(&partitions[i].Type.TypeGUID, GetGUIDFromPartitionTypeCode(layout->Partitions[i].PartitionType), sizeof(GUID));
+
+		wprintf_s(L"%3d: %d blocks\n", partitions[i].PartitionNumber, partitionSize);
+		partitionsParsed++;
+	}
+
+	unsigned long long capacityRemaining = availableCapacity;
+	wprintf_s(L"\nBlocks available after subtracting value-based partitions: %d blocks\n\n", availableCapacity);
+	wprintf_s(L"Partition sizes of percentage-based partitions in blocks:\n");
+	for (int i = 0; i < layout->PartitionCount; i++)
+	{
+		// Loop through percentage-based partitions (with %)
+		if (wcsstr(layout->Partitions[i].PartitionSize, L"%") == 0)
+			continue;
+
+		unsigned long long partitionSize;
+		swscanf_s(layout->Partitions[i].PartitionSize, L"%4lld%%", &partitionSize);
+
+		if (partitionsParsed < layout->PartitionCount - 1)
+			partitionSize = partitionSize * availableCapacity / 100;
+		else
+			partitionSize = capacityRemaining;
+		capacityRemaining -= partitionSize;
+
+		partitions[i].PartitionNumber = layout->Partitions[i].PartitionNumber;
+		partitions[i].SectorCount = partitionSize * blockSize;
+		partitions[i].Type.SystemID = layout->Partitions[i].PartitionType >> 8;
+		//memcpy(&partitions[i].Type.TypeGUID, GetGUIDFromPartitionTypeCode(layout->Partitions[i].PartitionType), sizeof(GUID));
+
+		wprintf_s(L"%3d: %d blocks\n", partitions[i].PartitionNumber, partitionSize);
+		partitionsParsed++;
+	}
+
+	wprintf_s(L"\nProposed partition table:\n");
+	wprintf_s(L"Part #  Partition type         Start        End          Size\n");
+
+	unsigned long long currentSector = 2048;
+	wchar_t sizeBuffer[10];
+	for (int i = 0; i < layout->PartitionCount; i++)
+	{
+		partitions[i].StartLBA.ULL = currentSector;
+		currentSector += partitions[i].SectorCount;
+		partitions[i].EndLBA.ULL = currentSector - 1;
+		partitions[i].DiskNumber = CurrentDisk.DiskNumber;
+		const wchar_t* name = GetStringFromPartitionTypeGUID(partitions[i].Type.TypeGUID);
+		memcpy(partitions[i].Name, name, 36 * sizeof(wchar_t));
+		partitions[i].Name[35] = 0;
+
+		GetSizeStringFromBytes(partitions[i].SectorCount * CurrentDisk.SectorSize, sizeBuffer);
+		wprintf(L"%6d  %-21s  %-11lld  %-11lld  %s\n", partitions[i].PartitionNumber,
+			partitions[i].Name,
+			partitions[i].StartLBA.ULL,
+			partitions[i].EndLBA.ULL,
+			sizeBuffer);
+
+		CurrentDiskMBR.PartitionTable[i].StartLBA = static_cast<unsigned long>(partitions[i].StartLBA.ULL);
+		CurrentDiskMBR.PartitionTable[i].SectorCount = partitions[i].SectorCount;
+		CurrentDiskMBR.PartitionTable[i].SystemID = partitions[i].Type.SystemID;
+		CurrentDiskMBR.PartitionTable[i].BootIndicator = layout->Partitions[i].PartitionType & 0xff;
+	}
+
+	// Finalize partition table and write it to the disk
+	CurrentDiskType = PartitionTableType::MBR;
+	CurrentDiskOperatingMode = OperatingMode::MBR;
+	CurrentDiskPartitionTableDestroyed = true;
+	SavePartitionTableToDisk();
+
+	// Wait for VDS
+	CurrentPage->SetStatusText(L"Waiting while VDS refreshes the partition table...");
+	CurrentPage->Update();
+	Sleep(10000);
+
+	// Format partitions
+	CurrentPage->SetStatusText(L"WinParted is formatting the partitions on the disk...");
+	CurrentPage->Update();
+	HRESULT result = ERROR_SUCCESS;
+	for (int i = 0; i < layout->PartitionCount; i++)
 	{
 		if (lstrcmpW(layout->Partitions[i].FileSystem, L"RAW"))
 		{
@@ -1278,224 +1568,6 @@ bool PartitionManager::SetCurrentPartitionGuid(GUID value)
 	}
 }
 
-#define AssertHResult(a) { if (a != S_OK) { wprintf(L"Failed. (0x%08X)\n", hResult); return; } }
-#define AssertHResultC(a) { if (a != S_OK) { wprintf(L"Failed. (0x%08X)\n", hResult); continue; } }
-#define AssertHResultCQ(a) { if (a != S_OK) { continue; } }
-void PrintVdsData() 
-{
-	HRESULT hResult;
-	ULONG ulFetchCount;
-	VDS_DISK_PROP diskProperties;
-	VDS_DISK_EXTENT* diskExtents = NULL;
-	VDS_FILE_SYSTEM_PROP fsProperties;
-	VDS_VOLUME_PROP volumeProperties;
-	VDS_VOLUME_PLEX_PROP plexProperties;
-
-	IVdsServiceLoader* pLoader = NULL;
-	IVdsService* pService = NULL;
-	IVdsSwProvider* pProvider = NULL;
-	IVdsPack* pPack = NULL;
-	IVdsDisk* pDisk = NULL;
-	IVdsDiskPartitionMF* pDiskMF = NULL;
-	IVdsVolume* pVolume = NULL;
-	IVdsVolumeMF* pVolumeMF = NULL;
-	IVdsVolumePlex* pPlex = NULL;
-
-	IUnknown* pUnknown = NULL;
-	IEnumVdsObject* pEnumVdsSwProviders = NULL;
-	IEnumVdsObject* pEnumVdsPacks = NULL;
-	IEnumVdsObject* pEnumVdsDisks = NULL;
-	IEnumVdsObject* pEnumVdsVolumes = NULL;
-	IEnumVdsObject* pEnumVdsPlexes = NULL;
-
-	// Initilize COM and IVdsLoader
-	wprintf(L"Connecting to COM...");
-	hResult = CoInitialize(NULL);
-	AssertHResult(hResult);
-	hResult = CoCreateInstance(CLSID_VdsLoader, NULL, CLSCTX_LOCAL_SERVER, IID_IVdsServiceLoader, (void**)&pLoader);
-	AssertHResult(hResult);
-	wprintf(L"Success.\n");
-
-	// Connect to IVdsService
-	wprintf(L"Connecting to VDS service...");
-	hResult = pLoader->LoadService(NULL, &pService);
-	SafeRelease(pLoader);
-	AssertHResult(hResult);
-	hResult = pService->WaitForServiceReady();
-	AssertHResult(hResult);
-	wprintf(L"Success.\n");
-
-	// Refresh VDS data
-	wprintf(L"Refreshing data...");
-	hResult = pService->Reenumerate();
-	AssertHResult(hResult);
-	hResult = pService->Refresh();
-	AssertHResult(hResult);
-	wprintf(L"Success.\n");
-
-	// Query through all software providers
-	wprintf(L"Querying software providers...");
-	hResult = pService->QueryProviders(VDS_QUERY_SOFTWARE_PROVIDERS, &pEnumVdsSwProviders);
-	AssertHResult(hResult);
-	wprintf(L"Success.\n\n");
-
-	int swpIndex = 0;
-	while ((hResult = pEnumVdsSwProviders->Next(1, &pUnknown, &ulFetchCount)) == S_OK)
-	{
-		wprintf(L"Software Provider #%d:\n", swpIndex);
-		hResult = pUnknown->QueryInterface(&pProvider);
-		SafeRelease(pUnknown);
-		AssertHResultC(hResult);
-
-		// Query through all packs
-		hResult = pProvider->QueryPacks(&pEnumVdsPacks);
-		SafeRelease(pProvider);
-		AssertHResultC(hResult);
-
-		int packIndex = 0;
-		while ((hResult = pEnumVdsPacks->Next(1, &pUnknown, &ulFetchCount)) == S_OK)
-		{
-			hResult = pUnknown->QueryInterface(&pPack);
-			SafeRelease(pUnknown);
-			AssertHResultC(hResult);
-
-			// Query through all disks
-			hResult = pPack->QueryDisks(&pEnumVdsDisks);
-			AssertHResultC(hResult);
-
-			int diskIndex = 0;
-			while ((hResult = pEnumVdsDisks->Next(1, &pUnknown, &ulFetchCount)) == S_OK)
-			{
-				wprintf(L"   Pack #%d Disk %#d:\n", packIndex, diskIndex);
-				hResult = pUnknown->QueryInterface(&pDisk) | pUnknown->QueryInterface(&pDiskMF);
-				SafeRelease(pUnknown); 
-				AssertHResultC(hResult);
-
-				hResult = pDisk->GetProperties(&diskProperties);
-				AssertHResultC(hResult);
-
-				wprintf(L"      Name: %s\n", diskProperties.pwszFriendlyName);
-				wprintf(L"      Path: %s\n", diskProperties.pwszName);
-				wprintf(L"      Disk GUID: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}\n", 
-					diskProperties.id.Data1, diskProperties.id.Data2, diskProperties.id.Data3,
-					diskProperties.id.Data4[0], diskProperties.id.Data4[1], diskProperties.id.Data4[2], diskProperties.id.Data4[3],
-					diskProperties.id.Data4[4], diskProperties.id.Data4[5], diskProperties.id.Data4[6], diskProperties.id.Data4[7]);
-				wprintf(L"      Extents:\n");
-
-				// Query through extents
-				hResult = pDisk->QueryExtents(&diskExtents, (PLONG)&ulFetchCount);
-				AssertHResultC(hResult);
-
-				for (int i = 0; i < ulFetchCount; i++)
-				{
-					wprintf(L"         Extent #%d:\n", i);
-					wprintf(L"            Type: %d\n", diskExtents[i].type);
-					wprintf(L"            Offset: %llu\n", diskExtents[i].ullOffset);
-					wprintf(L"            Size: %llu\n", diskExtents[i].ullSize);
-					wprintf(L"            Volume GUID: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}\n", 
-						diskExtents[i].volumeId.Data1, diskExtents[i].volumeId.Data2, diskExtents[i].volumeId.Data3,
-						diskExtents[i].volumeId.Data4[0], diskExtents[i].volumeId.Data4[1], diskExtents[i].volumeId.Data4[2], diskExtents[i].volumeId.Data4[3],
-						diskExtents[i].volumeId.Data4[4], diskExtents[i].volumeId.Data4[5], diskExtents[i].volumeId.Data4[6], diskExtents[i].volumeId.Data4[7]);
-
-					// Try getting file system information
-					hResult = pDiskMF->GetPartitionFileSystemProperties(diskExtents[i].ullOffset, &fsProperties);
-					AssertHResultCQ(hResult);
-
-					wprintf(L"            Filesystem:\n");
-					wprintf(L"               Type: %d\n", fsProperties.type);
-					wprintf(L"               Label: %s\n", fsProperties.pwszLabel);
-					wprintf(L"               Volume GUID: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}\n",
-						fsProperties.volumeId.Data1, fsProperties.volumeId.Data2, fsProperties.volumeId.Data3,
-						fsProperties.volumeId.Data4[0], fsProperties.volumeId.Data4[1], fsProperties.volumeId.Data4[2], fsProperties.volumeId.Data4[3],
-						fsProperties.volumeId.Data4[4], fsProperties.volumeId.Data4[5], fsProperties.volumeId.Data4[6], fsProperties.volumeId.Data4[7]);
-				}
-
-				diskIndex++;
-			}
-
-			// Query through all volumes
-			hResult = pPack->QueryVolumes(&pEnumVdsVolumes);
-			AssertHResultC(hResult);
-
-			int volumeIndex = 0;
-			while ((hResult = pEnumVdsVolumes->Next(1, &pUnknown, &ulFetchCount)) == S_OK)
-			{
-				wprintf(L"   Pack #%d Volume %#d:\n", packIndex, volumeIndex);
-				hResult = pUnknown->QueryInterface(&pVolume) | pUnknown->QueryInterface(&pVolumeMF);
-				SafeRelease(pUnknown);
-				AssertHResultC(hResult);
-
-				hResult = pVolume->GetProperties(&volumeProperties);
-				if (hResult != VDS_S_PROPERTIES_INCOMPLETE)
-					AssertHResultC(hResult);
-
-				wprintf(L"      Path: %s\n", volumeProperties.pwszName);
-				wprintf(L"      Volume GUID: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}\n", 
-					volumeProperties.id.Data1, volumeProperties.id.Data2, volumeProperties.id.Data3,
-					volumeProperties.id.Data4[0], volumeProperties.id.Data4[1], volumeProperties.id.Data4[2], volumeProperties.id.Data4[3],
-					volumeProperties.id.Data4[4], volumeProperties.id.Data4[5], volumeProperties.id.Data4[6], volumeProperties.id.Data4[7]);
-				wprintf(L"      Volume Plexes:\n");
-
-				// Query through all plexes
-				hResult = pVolume->QueryPlexes(&pEnumVdsPlexes);
-				AssertHResultC(hResult);
-
-				int plexIndex = 0;
-				while ((hResult = pEnumVdsPlexes->Next(1, &pUnknown, &ulFetchCount)) == S_OK)
-				{
-					hResult = pUnknown->QueryInterface(&pPlex);
-					SafeRelease(pUnknown);
-					AssertHResultC(hResult);
-
-					hResult = pPlex->GetProperties(&plexProperties);
-					AssertHResultC(hResult);
-
-					wprintf(L"         Plex {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX} extents:\n", 
-						plexProperties.id.Data1, plexProperties.id.Data2, plexProperties.id.Data3,
-						plexProperties.id.Data4[0], plexProperties.id.Data4[1], plexProperties.id.Data4[2], plexProperties.id.Data4[3],
-						plexProperties.id.Data4[4], plexProperties.id.Data4[5], plexProperties.id.Data4[6], plexProperties.id.Data4[7]);
-
-					hResult = pPlex->QueryExtents(&diskExtents, (PLONG)&ulFetchCount);
-					AssertHResultC(hResult);
-
-					for (int i = 0; i < ulFetchCount; i++)
-					{
-						wprintf(L"            Extent #%d:\n", i);
-						wprintf(L"               Type: %d\n", diskExtents[i].type);
-						wprintf(L"               Offset: %llu\n", diskExtents[i].ullOffset);
-						wprintf(L"               Size: %llu\n", diskExtents[i].ullSize);
-						wprintf(L"               Disk GUID: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}\n",
-							diskExtents[i].diskId.Data1, diskExtents[i].diskId.Data2, diskExtents[i].diskId.Data3,
-							diskExtents[i].diskId.Data4[0], diskExtents[i].diskId.Data4[1], diskExtents[i].diskId.Data4[2], diskExtents[i].diskId.Data4[3],
-							diskExtents[i].diskId.Data4[4], diskExtents[i].diskId.Data4[5], diskExtents[i].diskId.Data4[6], diskExtents[i].diskId.Data4[7]);
-					}
-
-					plexIndex++;
-				}
-
-				// Try getting file system information
-				hResult = pVolumeMF->GetFileSystemProperties(&fsProperties);
-				AssertHResultCQ(hResult);
-
-				wprintf(L"      Filesystem:\n");
-				wprintf(L"         Type: %d\n", fsProperties.type);
-				wprintf(L"         Label: %s\n", fsProperties.pwszLabel);
-				wprintf(L"         Volume GUID: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}\n",
-					fsProperties.volumeId.Data1, fsProperties.volumeId.Data2, fsProperties.volumeId.Data3,
-					fsProperties.volumeId.Data4[0], fsProperties.volumeId.Data4[1], fsProperties.volumeId.Data4[2], fsProperties.volumeId.Data4[3],
-					fsProperties.volumeId.Data4[4], fsProperties.volumeId.Data4[5], fsProperties.volumeId.Data4[6], fsProperties.volumeId.Data4[7]);
-
-				volumeIndex++;
-			}
-
-			packIndex++;
-		}
-
-		swpIndex++;
-		wprintf(L"\n");
-	}
-}
-
 #define AssertQ(result, action) { if (result != S_OK) { action; }};
 #define AssertP(result, action) { if (result != S_OK) { wprintf(L"Failed (0x%08X)\n", result); action; } };
 
@@ -1671,8 +1743,6 @@ HRESULT PartitionManager::FormatPartition(PartitionInformation* partition, const
 						diskExtents[i].volumeId.Data4[0], diskExtents[i].volumeId.Data4[1], diskExtents[i].volumeId.Data4[2], diskExtents[i].volumeId.Data4[3],
 						diskExtents[i].volumeId.Data4[4], diskExtents[i].volumeId.Data4[5], diskExtents[i].volumeId.Data4[6], diskExtents[i].volumeId.Data4[7]);
 
-
-
 					// Test if volumeId is not null
 					const GUID GUID_NULL = { 0, 0, 0, { 0, 0, 0, 0, 0, 0, 0, 0 } };
 					if (memcmp(&GUID_NULL, &diskExtents[i].volumeId, sizeof(GUID)) == 0)
@@ -1680,6 +1750,7 @@ HRESULT PartitionManager::FormatPartition(PartitionInformation* partition, const
 						// If it is, check if it is an ESP/OEM volume
 						if (diskExtents[i].type == VDS_DET_ESP ||
 							diskExtents[i].type == VDS_DET_OEM)
+						{
 							// OEM volumes can only be assigned to a drive letter
 							if (mountPoint && lstrlenW(mountPoint) > 1)
 							{
@@ -1687,7 +1758,8 @@ HRESULT PartitionManager::FormatPartition(PartitionInformation* partition, const
 								goto releaseCOM;
 							}
 
-						goto noVolume;
+							goto oemOrESP;
+						}
 					}
 
 					// Get IVdsVolumeMF2 object
@@ -1719,8 +1791,16 @@ HRESULT PartitionManager::FormatPartition(PartitionInformation* partition, const
 					SafeRelease(pVolumeMF2);
 					Assert(hResult, goto releaseCOM);
 
+					// For some reason on MBR disks it takes longer for QueryAccessPaths to become
+					// available after formatting. So we just retry a couple of times.
+
 					DebugAction(wprintf(L"Querying and unmounting existing volume mount points..."));
-					hResult = pVolumeMF->QueryAccessPaths(&accessPaths, (PLONG)&ulFetchCount);
+					for (int i = 0; i < 10; i++) 
+					{
+						hResult = pVolumeMF->QueryAccessPaths(&accessPaths, (PLONG)&ulFetchCount);
+						if (hResult == S_OK) break;
+						Sleep(1000);
+					}
 					Assert(hResult, goto releaseCOM);
 					for (int i = 0; i < ulFetchCount; i++)
 						if (lstrlenW(accessPaths[i]) == 3)
@@ -1728,6 +1808,8 @@ HRESULT PartitionManager::FormatPartition(PartitionInformation* partition, const
 							hResult = pVolumeMF->DeleteAccessPath(accessPaths[i], true);
 							Assert(hResult, goto releaseCOM);
 						}
+					hResult = pVolumeMF->Dismount(TRUE, TRUE);
+					Assert(hResult, goto releaseCOM);
 					DebugAction(wprintf(L"Success.\n"));
 
 					wchar_t mountBuffer[MAX_PATH];
@@ -1747,9 +1829,9 @@ HRESULT PartitionManager::FormatPartition(PartitionInformation* partition, const
 				hResult = VDS_E_OBJECT_NOT_FOUND;
 				goto releaseCOM;
 
-			noVolume:
-				// The partition has no volume
-				DebugAction(wprintf(L"The partition has no volume or is an OEM partition.\n"));
+			oemOrESP:
+				// The partition is an OEM or ESP partition
+				DebugAction(wprintf(L"The partition is an OEM partition or is the EFI System Partition.\n"));
 
 				hResult = pDisk->QueryInterface(&pDiskMF);
 				SafeRelease(pDisk);

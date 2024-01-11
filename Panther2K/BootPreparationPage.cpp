@@ -532,10 +532,6 @@ void BootPreparationPage::PrepareBootFilesNew()
 	}
 
 	/*
-	* Configure boot sector for Legacy
-	*/
-
-	/*
 	* Convert the hive into a system hive
 	* This is done through the registry as bcdedit does not allow this
 	* This is REQUIRED for bcdedit to work in the installed system 
@@ -569,7 +565,25 @@ void BootPreparationPage::PrepareBootFilesNew()
 	status = RegSetKeyValueW(bcdKey, L"Description", L"System", REG_DWORD, &value, sizeof(DWORD));
 	status = RegSetKeyValueW(bcdKey, L"Description", L"TreatAsSystem", REG_DWORD, &value, sizeof(DWORD));
 	status = RegFlushKey(bcdKey);
+	status = RegCloseKey(bcdKey);
 	status = RegUnLoadKeyW(HKEY_LOCAL_MACHINE, L"p2k_bcd");
+
+	// Restore privileges
+	SetPrivilege(tokenHandle, SE_RESTORE_NAME, FALSE);
+	SetPrivilege(tokenHandle, SE_BACKUP_NAME, FALSE);
+
+	/*
+	* Configure boot sector for Legacy
+	*/
+	if (WindowsSetup::UseLegacy)
+	{
+		swprintf_s(commandBuffer, L"bootsect /nt60 %c: /force /mbr", WindowsSetup::Partition1Mount[0]);
+		if (_wsystem(commandBuffer))
+		{
+			// Failed
+			return;
+		}
+	}
 
 	/*
 	* Set partition type for EFI or System partition

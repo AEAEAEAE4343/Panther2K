@@ -257,6 +257,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 	* boot until I realized it was trying to find a non-existent VHD.
 	*/
 
+	LibPanther::Logger* logger = WindowsSetup::GetLogger();
+	logger->Write(PANTHER_LL_NORMAL, L"Generating Windows Boot Manager files...");
+
+	logger->Write(PANTHER_LL_DETAILED, L"Determining whether the system will be installed on a single disk...");
 	VOLUME_DISK_EXTENTS* vde = (VOLUME_DISK_EXTENTS*)safeMalloc(WindowsSetup::GetLogger(), sizeof(VOLUME_DISK_EXTENTS));
 
 	HANDLE volumeFileHandleP1 = CreateFileW(WindowsSetup::Partition1Volume, FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
@@ -278,10 +282,14 @@ void BootPreparationPage::PrepareBootFilesNew()
 	CloseHandle(volumeFileHandleP3);
 	free(vde);
 
+	logger->Write(PANTHER_LL_DETAILED, singleDisk ? L"The system will be installed on a single disk, not using VHD detection."
+		: L"The system will be installed on multiple disks, using VHD detection.");
+
 	/*
 	* Copy boot files
 	*/
 
+	logger->Write(PANTHER_LL_DETAILED, L"Copying boot files...");
 	SHFILEOPSTRUCTW fos = { 0 };
 	fos.hwnd = GetDesktopWindow();
 	fos.wFunc = FO_COPY;
@@ -312,6 +320,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	* Move Windows Boot Manager to the correct location
 	*/
 
+	logger->Write(PANTHER_LL_DETAILED, L"Copying boot manager to proper location...");
 	if (!WindowsSetup::UseLegacy)
 	{
 		swprintf_s(pathBuffers[1], L"%sEFI\\Boot", WindowsSetup::Partition1Mount);
@@ -340,6 +349,8 @@ void BootPreparationPage::PrepareBootFilesNew()
 	/*
 	* Check if BCD store already exists
 	*/
+
+	logger->Write(PANTHER_LL_DETAILED, L"Looking for existing BCD...");
 	wchar_t commandBuffer[MAX_PATH + 128];
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"%sBoot\\BCD"
 													  : L"%sEFI\\Microsoft\\Boot\\BCD", WindowsSetup::Partition1Mount);
@@ -348,6 +359,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (dwAttrib == INVALID_FILE_ATTRIBUTES ||
 		dwAttrib & FILE_ATTRIBUTE_DIRECTORY)
 	{
+		logger->Write(PANTHER_LL_DETAILED, L"No BCD exists. Creating a new store...");
 		/*
 		* Create BCD store
 		*/
@@ -391,6 +403,12 @@ void BootPreparationPage::PrepareBootFilesNew()
 			// Failed
 			return;
 		}
+
+		logger->Write(PANTHER_LL_DETAILED, L"Adding newly installed OS to BCD...");
+	}
+	else 
+	{
+		logger->Write(PANTHER_LL_DETAILED, L"A BCD already exists, adding newly installed OS to it...");
 	}
 
 	/*
@@ -463,6 +481,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	/*
 	* Configure Windows Boot Loader entry
 	*/
+	logger->Write(PANTHER_LL_DETAILED, L"Configuring Windows Boot Loader...");
 	// Set it to default
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /default %s"
 													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /default %s", WindowsSetup::Partition1Mount, guid);
@@ -538,6 +557,8 @@ void BootPreparationPage::PrepareBootFilesNew()
 	* and thus for sysprep to succeed in specializing the system
 	*/
 
+	logger->Write(PANTHER_LL_DETAILED, L"Converting BCD into a system boot configuration store...");
+
 	// Enable registry access first
 	HANDLE proccessHandle = GetCurrentProcess();
 	DWORD typeOfAccess = TOKEN_ADJUST_PRIVILEGES;
@@ -577,6 +598,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	*/
 	if (WindowsSetup::UseLegacy)
 	{
+		logger->Write(PANTHER_LL_DETAILED, L"Writing legacy boot sector...");
 		swprintf_s(commandBuffer, L"bootsect /nt60 %c: /force /mbr", WindowsSetup::Partition1Mount[0]);
 		if (_wsystem(commandBuffer))
 		{
@@ -589,7 +611,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 	* Set partition type for EFI or System partition
 	* This is REQUIRED for sysprep to succeed
 	*/
+	logger->Write(PANTHER_LL_DETAILED, L"Setting partition type of the boot partition...");
 	WindowsSetup::SetPartitionType(p1Disk, p1Offset, WindowsSetup::UseLegacy ? 0x2700 : 0xef00);
+
+	logger->Write(PANTHER_LL_DETAILED, L"Successfully prepared the newly installed OS for booting.");
 }
 
 void BootPreparationPage::Init()

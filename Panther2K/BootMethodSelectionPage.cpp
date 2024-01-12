@@ -85,6 +85,7 @@ bool BootMethodSelectionPage::KeyHandler(WPARAM wParam)
 		WindowsSetup::LoadPhase(2);
 		break;
 	case VK_RETURN:
+		WindowsSetup::GetLogger()->Write(PANTHER_LL_DETAILED, legacy ? L"Using legacy boot." : L"Using UEFI boot.");
 		WindowsSetup::UseLegacy = legacy;
 		WindowsSetup::LoadPhase(4);
 		break;

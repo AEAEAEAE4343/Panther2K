@@ -2,7 +2,7 @@
 //
 
 #include <iostream>
-#include "PartitionManager.h"
+#include "CoreFunctions\PartitionManager.h"
 
 int main()
 {

@@ -1,5 +1,5 @@
 #pragma once
-#include "Page.h"
+#include "..\Page.h"
 
 class PartitionInformationPage : public Page
 {

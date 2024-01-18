@@ -1,5 +1,5 @@
 ﻿#include "PartitionCreationPage.h"
-#include "PartitionManager.h"
+#include "..\CoreFunctions\PartitionManager.h"
 
 /*
 

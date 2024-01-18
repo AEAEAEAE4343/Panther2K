@@ -1,7 +1,7 @@
 #include "PartitionInformationPage.h"
-#include "PartitionManager.h"
 #include "PartitionTypeSelectionPage.h"
 #include "PartitionGuidSelectionPage.h"
+#include "..\CoreFunctions\PartitionManager.h"
 
 void PartitionInformationPage::InitPage()
 {
@@ -152,7 +152,7 @@ void PartitionInformationPage::RunPage()
 				if (PartitionManager::ShowMessagePage(L"Warning: All data on the partition will be lost and a new file system will be created. Would you like to continue?", MessagePageType::YesNo, MessagePageUI::Warning) != MessagePageResult::Yes)
 					break;
 
-				HRESULT hR = PartitionManager::FormatPartition(&PartitionManager::CurrentPartition, L"NTFS", NULL);
+				HRESULT hR = PartitionManager::FormatAndOrMountPartition(&PartitionManager::CurrentPartition, L"NTFS", NULL);
 				if (hR != S_OK)
 				{
 					wchar_t buffer[MAX_PATH * 2];

@@ -1,4 +1,4 @@
-#include "PartitionManager.h"
+#include "..\CoreFunctions\PartitionManager.h"
 
 // Taken from GPT fdisk (gdisk) source code
 // Modified a bit to work within the use of this application

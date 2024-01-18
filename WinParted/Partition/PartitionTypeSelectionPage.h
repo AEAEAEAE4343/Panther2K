@@ -1,6 +1,6 @@
 #pragma once
-#include "Page.h"
-#include "PartitionManager.h"
+#include "..\Page.h"
+#include "..\CoreFunctions\PartitionManager.h"
 
 class PartitionTypeSelectionPage : public Page
 {

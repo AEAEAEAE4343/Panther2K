@@ -1,5 +1,5 @@
 #include "PartitionGuidSelectionPage.h"
-#include "PartitionManager.h"
+#include "..\CoreFunctions\PartitionManager.h"
 
 void PartitionGuidSelectionPage::InitPage()
 {

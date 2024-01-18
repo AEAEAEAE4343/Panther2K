@@ -23,18 +23,26 @@ public:
 	static wchar_t GetFirstFreeDrive();
 	static bool LoadConfig();
 
-	static int RunPartitionManager();
+	// Program loop
 	static int RunSetup();
 	static void LoadPhase(int phase);
-	static bool SelectPartitionsWithDisk(int diskNumber);
-	static void SelectPartition(int stringIndex, VOLUME_INFO volume);
-	static void SelectNextPartition(int index);
 	static bool KeyHandler(WPARAM wParam);
 	static void LoadPage(Page* page);
 
+	// Partition selection (phase 4)
+	static void SelectPartition(int stringIndex, VOLUME_INFO volume);
+	static void SelectNextPartition(int index);
+
+	// WinParted functions
+	static int RunPartitionManager();
+	static bool SelectPartitionsWithDisk(int diskNumber);
 	static bool SetPartitionType(int disk, unsigned long long offset, short type);
 
+	// Drivers
 	static void LoadDrivers();
+	static void InstallDrivers();
+
+	// Wim file
 	static bool LoadWimFile();
 	static void GetWimImageCount();
 	static void EnumerateImageInfo();

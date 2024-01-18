@@ -1,5 +1,5 @@
 #include "DiskSelectionPage.h"
-#include "PartitionManager.h"
+#include "CoreFunctions\PartitionManager.h"
 #include "DiskPartitioningPage.h"
 
 void DiskSelectionPage::InitPage()

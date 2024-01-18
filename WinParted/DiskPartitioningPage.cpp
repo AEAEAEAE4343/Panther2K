@@ -1,8 +1,8 @@
 #include "DiskPartitioningPage.h"
-#include "PartitionManager.h"
-#include "PartitionInformationPage.h"
-#include "PartitionCreationPage.h"
-#include "PartitionTypeSelectionPage.h"
+#include "CoreFunctions\PartitionManager.h"
+#include "Partition\PartitionInformationPage.h"
+#include "Partition\PartitionCreationPage.h"
+#include "Partition\PartitionTypeSelectionPage.h"
 
 void DiskPartitioningPage::InitPage()
 {

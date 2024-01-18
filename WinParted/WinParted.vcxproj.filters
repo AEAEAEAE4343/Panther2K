@@ -21,7 +21,7 @@
     <ClCompile Include="Page.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PartitionManager.cpp">
+    <ClCompile Include="CoreFunctions\PartitionManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="DiskSelectionPage.cpp">
@@ -30,22 +30,28 @@
     <ClCompile Include="DiskPartitioningPage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PartitionTypes.cpp">
+    <ClCompile Include="Partition\PartitionTypes.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PartitionInformationPage.cpp">
+    <ClCompile Include="Partition\PartitionInformationPage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="MessagePage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PartitionTypeSelectionPage.cpp">
+    <ClCompile Include="Partition\PartitionTypeSelectionPage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PartitionGuidSelectionPage.cpp">
+    <ClCompile Include="Partition\PartitionGuidSelectionPage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="PartitionCreationPage.cpp">
+    <ClCompile Include="Partition\PartitionCreationPage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoreFunctions\VdsFunctions.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CoreFunctions\DllExports.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -53,7 +59,7 @@
     <ClInclude Include="Page.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PartitionManager.h">
+    <ClInclude Include="CoreFunctions\PartitionManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DiskSelectionPage.h">
@@ -65,22 +71,22 @@
     <ClInclude Include="DiskPartitioningPage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PartitionTable.h">
+    <ClInclude Include="Partition\PartitionTable.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PartitionInformationPage.h">
+    <ClInclude Include="Partition\PartitionInformationPage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="MessagePage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PartitionTypeSelectionPage.h">
+    <ClInclude Include="Partition\PartitionTypeSelectionPage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PartitionGuidSelectionPage.h">
+    <ClInclude Include="Partition\PartitionGuidSelectionPage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="PartitionCreationPage.h">
+    <ClInclude Include="Partition\PartitionCreationPage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

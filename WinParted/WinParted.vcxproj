@@ -74,20 +74,26 @@
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)P2KConsole\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x86);$(WindowsSDK_LibraryPath_x86);$(SolutionDir)P2KConsole\bin\$(Platform)\$(Configuration)</LibraryPath>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>output\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)P2KConsole\include</IncludePath>
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>output\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)P2KConsole\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(SolutionDir)P2KConsole\bin\$(Platform)\$(Configuration)</LibraryPath>
+    <IntDir>output\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(VC_IncludePath);$(WindowsSDK_IncludePath);$(SolutionDir)P2KConsole\include</IncludePath>
     <LibraryPath>$(VC_LibraryPath_x64);$(WindowsSDK_LibraryPath_x64);$(SolutionDir)P2KConsole\bin\$(Platform)\$(Configuration)</LibraryPath>
+    <IntDir>output\$(Platform)\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -154,29 +160,31 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="CoreFunctions\DllExports.cpp" />
+    <ClCompile Include="CoreFunctions\VdsFunctions.cpp" />
     <ClCompile Include="DiskPartitioningPage.cpp" />
-    <ClCompile Include="PartitionCreationPage.cpp" />
-    <ClCompile Include="PartitionGuidSelectionPage.cpp" />
-    <ClCompile Include="PartitionInformationPage.cpp" />
+    <ClCompile Include="Partition\PartitionCreationPage.cpp" />
+    <ClCompile Include="Partition\PartitionGuidSelectionPage.cpp" />
+    <ClCompile Include="Partition\PartitionInformationPage.cpp" />
     <ClCompile Include="DiskSelectionPage.cpp" />
     <ClCompile Include="MessagePage.cpp" />
-    <ClCompile Include="PartitionTypes.cpp" />
+    <ClCompile Include="Partition\PartitionTypes.cpp" />
     <ClCompile Include="Page.cpp" />
-    <ClCompile Include="PartitionManager.cpp" />
-    <ClCompile Include="PartitionTypeSelectionPage.cpp" />
+    <ClCompile Include="CoreFunctions\PartitionManager.cpp" />
+    <ClCompile Include="Partition\PartitionTypeSelectionPage.cpp" />
     <ClCompile Include="WinParted.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DiskPartitioningPage.h" />
-    <ClInclude Include="PartitionCreationPage.h" />
-    <ClInclude Include="PartitionGuidSelectionPage.h" />
-    <ClInclude Include="PartitionInformationPage.h" />
+    <ClInclude Include="Partition\PartitionCreationPage.h" />
+    <ClInclude Include="Partition\PartitionGuidSelectionPage.h" />
+    <ClInclude Include="Partition\PartitionInformationPage.h" />
     <ClInclude Include="DiskSelectionPage.h" />
     <ClInclude Include="MessagePage.h" />
     <ClInclude Include="Page.h" />
-    <ClInclude Include="PartitionManager.h" />
-    <ClInclude Include="PartitionTable.h" />
-    <ClInclude Include="PartitionTypeSelectionPage.h" />
+    <ClInclude Include="CoreFunctions\PartitionManager.h" />
+    <ClInclude Include="Partition\PartitionTable.h" />
+    <ClInclude Include="Partition\PartitionTypeSelectionPage.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>

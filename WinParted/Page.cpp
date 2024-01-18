@@ -1,5 +1,5 @@
 #include "Page.h"
-#include "PartitionManager.h"
+#include "CoreFunctions\PartitionManager.h"
 #include "MessagePage.h"
 
 Page::Page()

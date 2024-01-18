@@ -18,6 +18,7 @@ using namespace Gdiplus;
 #include "Resource.h"
 #include "iatpatch.h"
 #include <Shlwapi.h>
+#include "pathcch.h"
 
 // Undocumented WIMGAPI flag, loads the file with solid compression
 #define WIM_FLAG_SOLIDCOMPRESSION 0x20000000
@@ -613,17 +614,26 @@ int WindowsSetup::RunPartitionManager()
 
 void WindowsSetup::LoadDrivers()
 {
+	logger->Write(PANTHER_LL_DETAILED, L"Loading drivers for installation...");
+
 	wchar_t commandBuffer[MAX_PATH + 25];
+	wchar_t pathBuffer[MAX_PATH];
+	GetCurrentDirectoryW(MAX_PATH, pathBuffer);
+	GetModuleFileNameW(NULL, commandBuffer, MAX_PATH + 25);
+	PathCchRemoveFileSpec(commandBuffer, MAX_PATH + 25);
+	SetCurrentDirectoryW(commandBuffer);
+
 	WIN32_FIND_DATAW ffd;
-	DWORD dwAttrib = GetFileAttributesW(L".\\drivers");
+	DWORD dwAttrib = GetFileAttributesW(L".\\pedrivers");
 
 	if (!(dwAttrib != INVALID_FILE_ATTRIBUTES &&
 		(dwAttrib & FILE_ATTRIBUTE_DIRECTORY)))
 	{
+		SetCurrentDirectoryW(pathBuffer);
 		return;
 	}
 
-	HANDLE hFind = FindFirstFileW(L".\\drivers\\*", &ffd);
+	HANDLE hFind = FindFirstFileW(L".\\pedrivers\\*", &ffd);
 	int lastError = GetLastError();
 
 	wchar_t buffer[MAX_PATH * 2];
@@ -637,7 +647,7 @@ void WindowsSetup::LoadDrivers()
 				swprintf_s(buffer, MAX_PATH * 2, L"Loading driver %s...", ffd.cFileName);
 				logger->Write(PANTHER_LL_DETAILED, buffer);
 
-				swprintf_s(commandBuffer, MAX_PATH + 25, L"drvload.exe .\\drivers\\%s", ffd.cFileName);
+				swprintf_s(commandBuffer, MAX_PATH + 25, L"drvload.exe .\\pedrivers\\%s", ffd.cFileName);
 				int ret = _wsystem(commandBuffer);
 				if (ret) 
 				{
@@ -660,6 +670,70 @@ void WindowsSetup::LoadDrivers()
 		msgBox->ShowDialog();
 		delete msgBox;
 	}
+
+	SetCurrentDirectoryW(pathBuffer);
+}
+
+void WindowsSetup::InstallDrivers()
+{
+	logger->Write(PANTHER_LL_DETAILED, L"Installing drivers onto the system...");
+
+	wchar_t commandBuffer[MAX_PATH + 25];
+	wchar_t pathBuffer[MAX_PATH];
+	GetCurrentDirectoryW(MAX_PATH, pathBuffer);
+	GetModuleFileNameW(NULL, commandBuffer, MAX_PATH + 25);
+	PathCchRemoveFileSpec(commandBuffer, MAX_PATH + 25);
+	SetCurrentDirectoryW(commandBuffer);
+
+	WIN32_FIND_DATAW ffd;
+	DWORD dwAttrib = GetFileAttributesW(L".\\drivers");
+
+	if (!(dwAttrib != INVALID_FILE_ATTRIBUTES &&
+		(dwAttrib & FILE_ATTRIBUTE_DIRECTORY)))
+	{
+		SetCurrentDirectoryW(pathBuffer);
+		return;
+	}
+
+	HANDLE hFind = FindFirstFileW(L".\\drivers\\*", &ffd);
+	int lastError = GetLastError();
+
+	wchar_t buffer[MAX_PATH * 2];
+	if (hFind != INVALID_HANDLE_VALUE)
+	{
+		do
+		{
+			wchar_t* dot = wcsrchr(ffd.cFileName, L'.');
+			if (dot && !wcscmp(dot, L".inf") && !(ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+			{
+				swprintf_s(buffer, MAX_PATH * 2, L"Installing driver %s...", ffd.cFileName);
+				logger->Write(PANTHER_LL_DETAILED, buffer);
+
+				swprintf_s(commandBuffer, MAX_PATH + 25, L"dism /image:\"%s\" /add-driver /driver:\".\\drivers\\%s\"", Partition1Mount, ffd.cFileName);
+				int ret = _wsystem(commandBuffer);
+				if (ret)
+				{
+					swprintf_s(buffer, MAX_PATH * 2, L"An error occured while installing driver %s (0x%08x). Installation will continue, but a device required for booting might not be available.", ffd.cFileName, ret);
+					logger->Write(PANTHER_LL_NORMAL, buffer);
+					MessageBoxPage* msgBox = new MessageBoxPage(buffer, false, currentPage);
+					msgBox->ShowDialog();
+					delete msgBox;
+					continue;
+				}
+			}
+
+		} while (FindNextFileW(hFind, &ffd) != 0);
+		FindClose(hFind);
+	}
+	else
+	{
+		logger->Write(PANTHER_LL_NORMAL, L"Could not enumerate Windows installation drivers. Installation will continue, but a device required for booting might not be available.");
+		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occured while enumerating available drivers. Installation will continue, but a device required for booting might not be available.", false, currentPage);
+		msgBox->ShowDialog();
+		delete msgBox;
+	}
+
+	SetCurrentDirectoryW(pathBuffer);
 }
 
 int WindowsSetup::RunSetup()
@@ -727,6 +801,7 @@ int WindowsSetup::RunSetup()
 	KeyHandler(VK_NUMPAD0);
 
 	// Load PE drivers
+	IsWinPE = true;
 	if (IsWinPE) 
 	{
 		logger->Write(PANTHER_LL_DETAILED, L"Loading WinPE drivers...");
@@ -749,7 +824,6 @@ int WindowsSetup::RunSetup()
 	// TEMPORARY: code page 437 is unsupported currently
 	// WinPE is unsupported currently
 	UseCp437 = false;
-	IsWinPE = true;
 	SkipPhase3 = false;
 
 	logger->Write(PANTHER_LL_NORMAL, L"Finished initialization.");
@@ -831,6 +905,13 @@ void WindowsSetup::LoadPhase(int phase)
 		page = new WimApplyPage();
 		LoadPage(page);
 		((WimApplyPage*)page)->ApplyImage();
+
+		// Install drivers
+		page = new Page();
+		LoadPage(page);
+		page->text = L"Panther2K is installing drivers...";
+		page->Draw();
+		InstallDrivers();
 	case 6:
 		// Generate boot manager files and BCD
 		page = new BootPreparationPage();

@@ -1,10 +1,12 @@
 #pragma once
 
-#include "PartitionTable.h"
 #include <PantherConsole.h>
-#include "Page.h"
-#include "MessagePage.h"
 #include <stack>
+#include <PantherLogger.h>
+
+#include "..\Partition\PartitionTable.h"
+#include "..\Page.h"
+#include "..\MessagePage.h"
 
 enum class PartitionTableType
 {
@@ -59,8 +61,6 @@ struct WP_PART_LAYOUT
 #define PartitionTypeCount 224
 #define PartitionTypeCommonCount 16
 
-void PrintVdsData();
-
 class PartitionManager
 {
 public:
@@ -71,6 +71,7 @@ public:
 	//
 
 	static void SetConsole(Console* console);
+	static void SetLogger(LibPanther::Logger* logger);
 	static int RunWinParted();
     static int RunWinParted(Console* console);
 	static void PushPage(Page* page);
@@ -118,7 +119,7 @@ public:
 	static bool LoadPartition(PartitionInformation* partition);
 	static bool SetCurrentPartitionType(short value);
 	static bool SetCurrentPartitionGuid(GUID value);
-	static HRESULT FormatPartition(PartitionInformation* partition, const wchar_t* fileSystem, const wchar_t* mountPoint);
+	static HRESULT FormatAndOrMountPartition(PartitionInformation* partition, const wchar_t* fileSystem, const wchar_t* mountPoint);
 
 	static PartitionInformation CurrentPartition;
 	
@@ -141,6 +142,7 @@ public:
 	static bool ShowNoInfoDialogs;
 private:
 	static Console* currentConsole;
+	static LibPanther::Logger* logger;
 	static Page* nextPage;
 	static std::stack<Page*> pageStack;
 	static bool shouldExit;

@@ -23,6 +23,7 @@ PartitionInformation PartitionManager::CurrentPartition = { 0 };
 bool PartitionManager::ShowNoInfoDialogs = false;
 
 Console* PartitionManager::currentConsole = 0;
+LibPanther::Logger* PartitionManager::logger = 0;
 Page* PartitionManager::CurrentPage = 0;
 std::stack<Page*> PartitionManager::pageStack = std::stack<Page*>();
 bool PartitionManager::shouldExit = false;
@@ -33,15 +34,9 @@ void PartitionManager::SetConsole(Console* console)
 	currentConsole = console;
 }
 
-
 void PartitionManager::SetLogger(LibPanther::Logger* logger)
 {
 	PartitionManager::logger = logger;
-}
-
-int PartitionManager::RunWinParted()
-{
-    return PartitionManager::RunWinParted((Console*)NULL);
 }
 
 int PartitionManager::RunWinParted(Console* console)
@@ -60,7 +55,6 @@ int PartitionManager::RunWinParted(Console* console)
 		}
 		else 
 		{
-			printf("Creating WinParted console (Win32)...");
 			printf("Creating WinParted console (Win32)...");
 			currentConsole = new Win32Console();
 			currentConsole->Init();

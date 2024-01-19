@@ -23,11 +23,23 @@ using namespace Gdiplus;
 // Undocumented WIMGAPI flag, loads the file with solid compression
 #define WIM_FLAG_SOLIDCOMPRESSION 0x20000000
 
-#define ORD_InitializeCRT           (LPCSTR)3
-#define ORD_RunWinParted            (LPCSTR)4
-#define ORD_SetPartType             (LPCSTR)5
-#define ORD_ApplyP2KLayoutToDiskGPT (LPCSTR)1
-#define ORD_ApplyP2KLayoutToDiskMBR (LPCSTR)2
+/*
+LIBRARY   WINPARTED
+EXPORTS
+   InitializeCRT   @1
+   RunWinParted   @2
+   ApplyP2KLayoutToDiskGPT   @3
+   ApplyP2KLayoutToDiskMBR   @4
+   SetPartType   @5
+   FormatAndOrMountPartition   @6
+*/
+
+#define ORD_InitializeCRT             (LPCSTR)1
+#define ORD_RunWinParted              (LPCSTR)2
+#define ORD_ApplyP2KLayoutToDiskGPT   (LPCSTR)3
+#define ORD_ApplyP2KLayoutToDiskMBR   (LPCSTR)4
+#define ORD_SetPartType               (LPCSTR)5
+#define ORD_FormatAndOrMountPartition (LPCSTR)6
 
 // Config
 bool WindowsSetup::UseCp437 = false;
@@ -309,7 +321,7 @@ bool WindowsSetup::LoadConfig()
 	{
 		if (!LocateWimFile(iniBuffer))
 		{
-			logger->Write(PANTHER_LL_BASIC, L"[Phase2/WimFile] The WIM file could not be found automatically.");
+			logger->Write(PANTHER_LL_BASIC, L"[Phase2\\WimFile] The WIM file could not be found automatically.");
 			msgBox = new MessageBoxPage(L"The WIM file could not be found automatically. Please specify the location of the WIM file to use in the config. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
 			delete msgBox;
@@ -321,7 +333,7 @@ bool WindowsSetup::LoadConfig()
 		WimFile = wimPath;
 		if (!LoadWimFile())
 		{
-			wsprintfW(logBuffer, L"[Phase2/WimFile] The WIM file '%s' could not be loaded.", WimFile);
+			wsprintfW(logBuffer, L"[Phase2\\WimFile] The WIM file '%s' could not be loaded.", WimFile);
 			logger->Write(PANTHER_LL_BASIC, logBuffer);
 			msgBox = new MessageBoxPage(L"The WIM file could not be loaded. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
@@ -347,7 +359,7 @@ bool WindowsSetup::LoadConfig()
 		WimFile = wimPath;
 		if (!LoadWimFile())
 		{
-			wsprintfW(logBuffer, L"[Phase2/WimFile] The WIM file '%s' could not be loaded.", WimFile);
+			wsprintfW(logBuffer, L"[Phase2\\WimFile] The WIM file '%s' could not be loaded.", WimFile);
 			logger->Write(PANTHER_LL_BASIC, logBuffer);
 			msgBox = new MessageBoxPage(L"The WIM file specified in the config could not be loaded. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
@@ -357,7 +369,9 @@ bool WindowsSetup::LoadConfig()
 	}
 	else
 	{
-		msgBox = new MessageBoxPage(L"The specified configuration option has not yet been implemented (WimFile=Ask). Panther2K will exit.", true, currentPage);
+		wsprintfW(logBuffer, L"[Phase2\\WimFile] The configuration option 'Ask' has not yet been implemented yet.");
+		logger->Write(PANTHER_LL_BASIC, logBuffer);
+		msgBox = new MessageBoxPage(L"The specified configuration option has not been implemented yet (WimFile=Ask). Panther2K will exit.", true, currentPage);
 		msgBox->ShowDialog();
 		delete msgBox;
 		return false;
@@ -372,6 +386,8 @@ bool WindowsSetup::LoadConfig()
 			HANDLE hImage = WIMLoadImage(WimHandle, WimImageIndex);
 			if (!hImage)
 			{
+				wsprintfW(logBuffer, L"[Phase2\\WimImageIndex] Failed to load the image index specified in the config (%d)", WimImageIndex);
+				logger->Write(PANTHER_LL_BASIC, logBuffer);
 				msgBox = new MessageBoxPage(L"Failed to load the image index specified in the config. Panther2K will exit.", true, currentPage);
 				msgBox->ShowDialog();
 				delete msgBox;
@@ -391,6 +407,8 @@ bool WindowsSetup::LoadConfig()
 			UseLegacy = true;
 		else
 		{
+			wsprintfW(logBuffer, L"[Phase3\\BootMethod] Invalid value '%s'. Must be 'UEFI' or 'Legacy'.", iniBuffer);
+			logger->Write(PANTHER_LL_BASIC, logBuffer);
 			msgBox = new MessageBoxPage(L"The value Phase3\\BootMethod specified in the config file is invalid. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
 			delete msgBox;
@@ -1347,6 +1365,11 @@ void WindowsSetup::EnumerateImageInfo()
 		fTime.dwLowDateTime = wcstoul(creationLow, &end_str, 0);
 		FileTimeToSystemTime(&fTime, &time);
 		(pointer + i - 1)->CreationTime = time;
+
+
+		node = imageNode->first_node("TOTALBYTES");
+		wchar_t* byteCountStr = getWcharPointer(node->value());
+		(pointer + i - 1)->TotalSize = wcstoull(creationLow, &end_str, 0);
 	}
 
 	delete doc;

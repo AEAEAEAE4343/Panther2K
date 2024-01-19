@@ -72,7 +72,6 @@ public:
 
 	static void SetConsole(Console* console);
 	static void SetLogger(LibPanther::Logger* logger);
-	static int RunWinParted();
     static int RunWinParted(Console* console);
 	static void PushPage(Page* page);
 	static void PopPage();

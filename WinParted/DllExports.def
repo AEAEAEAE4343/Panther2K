@@ -1,0 +1,8 @@
+LIBRARY   WINPARTED
+EXPORTS
+   InitializeCRT   @1
+   RunWinParted   @2
+   ApplyP2KLayoutToDiskGPT   @3
+   ApplyP2KLayoutToDiskMBR   @4
+   SetPartType   @5
+   FormatAndOrMountPartition   @6

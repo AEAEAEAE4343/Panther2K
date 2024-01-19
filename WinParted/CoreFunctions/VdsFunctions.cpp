@@ -1,20 +1,13 @@
 #define INITGUID
 #include "PartitionManager.h"
 
-#define AssertLogged(result, action) { if (result != S_OK) { action; }};
-#define AssertPrinted(result, action) { if (result != S_OK) { wprintf(L"Failed (0x%08X)\n", result); action; } };
-
 #ifdef _DEBUG
 #define DebugAction(string) {string};
 #else
 #define DebugAction(string) {};
 #endif
 
-#ifdef _DEBUG
-#define Assert(result, action) AssertPrinted(result, action)
-#else
-#define Assert(result, action) AssertLogged(result, action)
-#endif
+#define Assert(result, action) { if (result != S_OK) { wchar_t buffer[20]; swprintf_s(buffer, L"Failed (0x%08X)\n", result); PartitionManager::logger->Write(PANTHER_LL_BASIC, buffer); action; }};
 
 #define ObjectNameInformation (OBJECT_INFORMATION_CLASS)1
 #define SafeRelease(x) {if (NULL != x) { x->Release(); x = NULL; } }
@@ -28,9 +21,9 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 	if (!fileSystem && !mountPoint)
 		return ERROR_INVALID_PARAMETER;
 
-	DebugAction(wprintf(L"Starting %s%s%s operation for partition %d on disk %d.\n", fileSystem ? L"format" : L"", fileSystem && mountPoint ? L" and " : L"", mountPoint ? L"mount" : L"", partition->PartitionNumber, partition->DiskNumber));
-	if (fileSystem) DebugAction(wprintf(L"Target file system: %s.\n", fileSystem));
-	if (mountPoint) DebugAction(wprintf(L"Target mount point: %s.\n", mountPoint));
+	DebugAction(PartitionManager::logger->Write(PANTHER_LL_BASIC, L"Starting %s%s%s operation for partition %d on disk %d.\n", fileSystem ? L"format" : L"", fileSystem && mountPoint ? L" and " : L"", mountPoint ? L"mount" : L"", partition->PartitionNumber, partition->DiskNumber));
+	if (fileSystem) DebugAction(PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Target file system: %s.\n", fileSystem));
+	if (mountPoint) DebugAction(PartitionManager::logger->Write(PANTHER_LL_DETAILEDL"Target mount point: %s.\n", mountPoint));
 
 	wchar_t requestedDisk[MAX_PATH];
 	swprintf_s(requestedDisk, L"\\\\.\\GLOBALROOT\\Device\\Harddisk%d\\Partition0", partition->DiskNumber);
@@ -44,7 +37,7 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 	Assert(res, return res);
 	wcscpy_s(requestedDisk, ((UNICODE_STRING*)infoBuffer)->Buffer);
 
-	DebugAction(wprintf(L"Target disk path: %s.\n", requestedDisk));
+	DebugAction(PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Target disk path: %s.\n", requestedDisk));
 
 	HRESULT hResult;
 	HRESULT asyncRes;
@@ -75,35 +68,31 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 	IEnumVdsObject* pEnumVdsDisks = NULL;
 
 	// Initilize COM and IVdsLoader
-	DebugAction(wprintf(L"Connecting to COM..."));
+	DebugAction(PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Connecting to COM..."));
 	hResult = CoInitialize(NULL);
 	Assert(hResult, return hResult);
 	hResult = CoCreateInstance(CLSID_VdsLoader, NULL, CLSCTX_LOCAL_SERVER, IID_IVdsServiceLoader, (void**)&pLoader);
 	Assert(hResult, goto releaseCOM);
-	DebugAction(wprintf(L"Success.\n"));
 
 	// Connect to IVdsService
-	DebugAction(wprintf(L"Connecting to VDS service..."));
+	DebugAction(PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Connecting to VDS service..."));
 	hResult = pLoader->LoadService(NULL, &pService);
 	SafeRelease(pLoader);
 	Assert(hResult, goto releaseCOM);
 	hResult = pService->WaitForServiceReady();
 	Assert(hResult, goto releaseCOM);
-	DebugAction(wprintf(L"Success.\n"));
 
 	// Refresh VDS data
-	DebugAction(wprintf(L"Refreshing data..."));
+	DebugAction(PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Refreshing data..."));
 	hResult = pService->Reenumerate();
 	Assert(hResult, goto releaseCOM);
 	hResult = pService->Refresh();
 	Assert(hResult, goto releaseCOM);
-	DebugAction(wprintf(L"Success.\n"));
 
 	// Query through all software providers
-	DebugAction(wprintf(L"Querying software providers..."));
+	DebugAction(PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Querying software providers..."));
 	hResult = pService->QueryProviders(VDS_QUERY_SOFTWARE_PROVIDERS, &pEnumVdsSwProviders);
 	Assert(hResult, goto releaseCOM);
-	DebugAction(wprintf(L"Success.\n\n"));
 
 	for (int swpIndex = 0; (hResult = pEnumVdsSwProviders->Next(1, &pUnknown, &ulFetchCount)) == S_OK; swpIndex++)
 	{

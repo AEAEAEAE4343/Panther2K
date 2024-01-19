@@ -13,6 +13,7 @@ struct ImageInfo
 	unsigned int Architecture;
 	wchar_t* DisplayName;
 	SYSTEMTIME CreationTime;
+	unsigned long long TotalSize;
 };
 
 typedef struct VOLUME_INFO;

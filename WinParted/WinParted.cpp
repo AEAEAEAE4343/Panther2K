@@ -7,7 +7,7 @@
 int main()
 {
     //PrintVdsData();
-    PartitionManager::RunWinParted();
+    PartitionManager::RunWinParted(NULL);
 
     return 0;
 }

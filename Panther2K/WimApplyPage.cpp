@@ -13,20 +13,30 @@ bool runMessageLoop = true;
 bool canSendProgress = true;
 bool canSendFileName = true;
 unsigned int progress = 0;
-HANDLE hFileLog;
+LibPanther::Logger* installLog = nullptr;
 
-void WriteToFile(const wchar_t* string) 
+void WriteToFile(const wchar_t* string)
 {
 	DWORD bytes;
-	if (!hFileLog)
+	if (!installLog)
 	{
 		wchar_t buffer[MAX_PATH];
 		swprintf_s(buffer, L"%s%s", WindowsSetup::Partition3Mount, L"panther2k.log");
-		hFileLog = CreateFileW(buffer, GENERIC_ALL, FILE_SHARE_READ, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-		if (!hFileLog) return;
+		installLog = new LibPanther::Logger(buffer, PANTHER_LL_VERBOSE);
+
+		WriteToFile(L"Starting Panther2K installation log...");
+		swprintf_s(buffer, L"   Installing %s to %s.", 
+			WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].DisplayName,
+			WindowsSetup::Partition3Volume);
+		WriteToFile(buffer);
+		swprintf_s(buffer, L"   Total installation size: %llu bytes", WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].TotalSize);
 	}
 
-	WriteFile(hFileLog, string, lstrlenW(string) * sizeof(wchar_t), &bytes, NULL);
+	if (string)
+	{
+		WindowsSetup::GetLogger()->Write(PANTHER_LL_BASIC, string);
+		installLog->Write(PANTHER_LL_BASIC, string);
+	}
 }
 
 DWORD __stdcall MessageCallback(IN DWORD Msg, IN WPARAM wParam, IN LPARAM lParam, IN PDWORD dwThreadId)
@@ -35,7 +45,7 @@ DWORD __stdcall MessageCallback(IN DWORD Msg, IN WPARAM wParam, IN LPARAM lParam
 	switch (Msg)
 	{
 	case WIM_MSG_PROGRESS:
-		swprintf_s(buffer, L"Progress: %lld%%\n", wParam);
+		swprintf_s(buffer, L"Installation progress: %lld%%\n", wParam);
 		WriteToFile(buffer);
 		PostThreadMessageW(*dwThreadId, WM_PROGRESSUPDATE, wParam, 0);
 		break;
@@ -45,15 +55,27 @@ DWORD __stdcall MessageCallback(IN DWORD Msg, IN WPARAM wParam, IN LPARAM lParam
 				canSendFileName = false;
 		break;
 	case WIM_MSG_INFO:
+	{
+		wchar_t messageBuffer[MAX_PATH];
+		FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, lParam, NULL, messageBuffer, MAX_PATH, NULL);
+		swprintf_s(buffer, L"System message (File %s): %s", (wchar_t*)wParam, messageBuffer);
+		WriteToFile(buffer);
+		break;
+	}
 	case WIM_MSG_ERROR:
+	{
+		wchar_t messageBuffer[MAX_PATH];
+		FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, lParam, NULL, messageBuffer, MAX_PATH, NULL);
+		swprintf_s(buffer, L"Error (File %s): %s", (wchar_t*)wParam, messageBuffer);
+		WriteToFile(buffer);
+		break;
+	}
 	case WIM_MSG_WARNING:
 	{
-		FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, lParam, NULL, buffer, MAX_PATH, NULL);
-		WriteToFile(L"File ");
-		WriteToFile((wchar_t*)wParam);
-		WriteToFile(L": ");
+		wchar_t messageBuffer[MAX_PATH];
+		FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, lParam, NULL, messageBuffer, MAX_PATH, NULL);
+		swprintf_s(buffer, L"Warning (File %s): %s", (wchar_t*)wParam, messageBuffer);
 		WriteToFile(buffer);
-		WriteToFile(L"\n");
 		break;
 	}
 	case WIM_MSG_TEXT:
@@ -61,22 +83,23 @@ DWORD __stdcall MessageCallback(IN DWORD Msg, IN WPARAM wParam, IN LPARAM lParam
 		WriteToFile(buffer);
 		break;
 	case WIM_MSG_SETRANGE:
-		swprintf_s(buffer, L"Total number of files to be applied: %lld\n", lParam);
-		WriteToFile(buffer);
+		swprintf_s(buffer, L"   Total number of files to be applied: %lld.", lParam);
+		WriteToFile(buffer); 
+		WriteToFile(L"Starting Windows installation...");
 		break;
 	case WIM_MSG_SETPOS:
-		swprintf_s(buffer, L"Number of files applied: %lld\n", lParam);
+		swprintf_s(buffer, L"Number of files applied: %lld.", lParam);
 		WriteToFile(buffer);
 		break;
 	case WIM_MSG_QUERY_ABORT:
-		WriteToFile(L"Abort opportunity given, but not aborting\n");
+		WriteToFile(L"Abort opportunity given, but not aborting.");
 		break;
 	case WIM_MSG_METADATA_EXCLUDE:
 	case WIM_MSG_STEPIT:
 	case WIM_MSG_STEPNAME:
 		break;
 	default:
-		swprintf_s(buffer, L"Unknown message: %d\n", Msg);
+		swprintf_s(buffer, L"Unknown message: %d.", Msg);
 		WriteToFile(buffer);
 		break;
 	}

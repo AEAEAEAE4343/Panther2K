@@ -45,7 +45,7 @@ DWORD __stdcall MessageCallback(IN DWORD Msg, IN WPARAM wParam, IN LPARAM lParam
 	switch (Msg)
 	{
 	case WIM_MSG_PROGRESS:
-		swprintf_s(buffer, L"Installation progress: %lld%%\n", wParam);
+		swprintf_s(buffer, L"Installation progress: %lld%%", wParam);
 		WriteToFile(buffer);
 		PostThreadMessageW(*dwThreadId, WM_PROGRESSUPDATE, wParam, 0);
 		break;
@@ -214,9 +214,6 @@ void WimApplyPage::ApplyImage()
 	DWORD bytesCopied;
 	wchar_t fileBuffer[1024];
 	ULONGLONG ticksBefore = GetTickCount64();
-
-	swprintf_s(fileBuffer, L"Starting installation of %s\n", WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].DisplayName);
-	WriteToFile(fileBuffer);
 
 	DWORD dwThreadId = GetCurrentThreadId();
 	CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)WimApplyThread, &dwThreadId, 0, 0);

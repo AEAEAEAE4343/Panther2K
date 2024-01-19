@@ -1,4 +1,3 @@
-LIBRARY   WINPARTED
 EXPORTS
    InitializeCRT   @1
    RunWinParted   @2

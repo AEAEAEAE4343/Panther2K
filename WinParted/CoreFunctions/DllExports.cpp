@@ -16,6 +16,8 @@ extern "C" int _stdcall RunWinParted(Console* console, LibPanther::Logger* logge
 };
 
 // TODO: Cleanup this mess
+// TODO: Merge GPT and MBR into a single function with a flag
+// TODO: Move partition layout information to Panther2K
 extern "C" HRESULT _stdcall ApplyP2KLayoutToDiskGPT(Console* console, LibPanther::Logger* logger, int diskNumber, bool letters, wchar_t*** mountPath, wchar_t*** volumeList)
 {
 	HRESULT ret;

@@ -10,6 +10,8 @@
 // Shows verbose progress informations
 #define PANTHER_LL_VERBOSE 3
 
+#define wlogf(logger, level, buffersize, message, ...) { wchar_t buffer[buffersize]; swprintf_s(buffer, message, __VA_ARGS__); logger->Write(level, buffer); }
+
 namespace LibPanther
 {
 	class Logger

@@ -5,12 +5,18 @@
 #include "Panther2K.h"
 #include "WindowsSetup.h"
 
-int main(int argc, char** argv) 
+// Command line builds (for testing and debugging)
+int wmain(int argc, wchar_t** argv) 
 {
-    printf("Starting Panther2K...\n");
+    if (__argc == 2 && lstrcmpiW(__wargv[1], L"--pe") == 0) 
+    {
+        WindowsSetup::IsWinPE = true;
+    }
+
     return WindowsSetup::RunSetup();
 }
 
+// Headless builds (for releases)
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
                      _In_opt_ HINSTANCE hPrevInstance,
                      _In_ LPWSTR    lpCmdLine,
@@ -19,8 +25,5 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
 
-    if (wcsstr(lpCmdLine, L"--pe")) {
-        WindowsSetup::IsWinPE = true;
-    }
-    return main(NULL, NULL);
+    return wmain(0, nullptr);
 }

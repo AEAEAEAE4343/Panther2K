@@ -102,6 +102,8 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>LibPanther.lib;Dbghelp.lib;shlwapi.lib;wimgapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>
+      </EntryPointSymbol>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -120,6 +122,8 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>LibPanther.lib;Dbghelp.lib;shlwapi.lib;wimgapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>
+      </EntryPointSymbol>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -134,6 +138,8 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>LibPanther.lib;Dbghelp.lib;shlwapi.lib;wimgapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>
+      </EntryPointSymbol>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -152,6 +158,8 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>Pathcch.lib;LibPanther.lib;Dbghelp.lib;shlwapi.lib;wimgapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <EntryPointSymbol>
+      </EntryPointSymbol>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -174,12 +182,14 @@
     <ClInclude Include="WimApplyPage.h" />
     <ClInclude Include="WindowsSetup.h" />
     <ClInclude Include="..\rapidxml.1.13.0\build\native\include\rapidxml\rapidxml.hpp" />
+    <ClInclude Include="WinPartedDll.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="BootMethodSelectionPage.cpp" />
     <ClCompile Include="BootPreparationPage.cpp" />
     <ClCompile Include="DiskSelectionPage.cpp" />
     <ClCompile Include="FinalPage.cpp" />
+    <ClCompile Include="WinPartedDll.cpp" />
     <ClInclude Include="iatpatch.h" />
     <ClCompile Include="ImageSelectionPage.cpp" />
     <ClCompile Include="MessageBoxPage.cpp" />

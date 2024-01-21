@@ -81,6 +81,9 @@
     <ClInclude Include="DiskSelectionPage.h">
       <Filter>Header Files\Pages</Filter>
     </ClInclude>
+    <ClInclude Include="WinPartedDll.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Panther2K.cpp">
@@ -124,6 +127,9 @@
     </ClCompile>
     <ClCompile Include="DiskSelectionPage.cpp">
       <Filter>Source Files\Pages</Filter>
+    </ClCompile>
+    <ClCompile Include="WinPartedDll.cpp">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

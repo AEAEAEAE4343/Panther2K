@@ -2,6 +2,8 @@
 #include <Shlwapi.h>
 #include <shlobj_core.h>
 
+// TODO: Make all exports return HRESULT codes
+
 EXTERN_C BOOL WINAPI _CRT_INIT(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved);
 extern "C" void _stdcall InitializeCRT()
 {
@@ -302,17 +304,17 @@ bool LoadPartitionFromOffset(int diskNumber, unsigned long long partOffset)
 	return false;
 }
 
-extern "C" bool _stdcall SetPartType(Console* console, LibPanther::Logger* logger, int diskNumber, unsigned long long partOffset, short partType)
+extern "C" HRESULT _stdcall SetPartType(Console* console, LibPanther::Logger* logger, int diskNumber, unsigned long long partOffset, short partType)
 {
 	PartitionManager::SetConsole(console);
 	PartitionManager::SetLogger(logger);
 	PartitionManager::ShowNoInfoDialogs = true;
-	bool returnValue = false;
+	HRESULT returnValue = ERROR_INVALID_HANDLE;
 
 	if (!LoadPartitionFromOffset(diskNumber, partOffset)) goto retFalse;
 	if (!PartitionManager::SetCurrentPartitionType(partType)) goto retFalse;
 	if (!PartitionManager::SavePartitionTableToDisk()) goto retFalse;
-	returnValue = true;
+	returnValue = ERROR_SUCCESS;
 
 retFalse:
 	PartitionManager::ShowNoInfoDialogs = false;

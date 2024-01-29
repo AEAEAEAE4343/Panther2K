@@ -3,6 +3,7 @@
 #include "QuitingPage.h"
 #include "wdkpartial.h"
 #include "MessageBoxPage.h"
+#include "WinPartedDll.h"
 
 bool libLoaded = false;
 NtQueryVolumeInformationFileFunction NtQueryVolumeInformationFile;
@@ -283,7 +284,7 @@ bool PartitionSelectionPage::KeyHandler(WPARAM wParam)
 		AddPopup(new QuitingPage());
 		break;
 	case VK_F8:
-		WindowsSetup::RunPartitionManager();
+		WinPartedDll::RunWinParted(console, WindowsSetup::GetLogger());
 		break;
 	case VK_F9:
 		showAll = !showAll;

@@ -3,6 +3,7 @@
 #include <iostream>
 #include "shlobj.h"
 #include "MessageBoxPage.h"
+#include "WinPartedDll.h"
 
 BOOL SetPrivilege(
 	HANDLE hToken,              // access token handle
@@ -612,7 +613,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	* This is REQUIRED for sysprep to succeed
 	*/
 	logger->Write(PANTHER_LL_DETAILED, L"Setting partition type of the boot partition...");
-	WindowsSetup::SetPartitionType(p1Disk, p1Offset, WindowsSetup::UseLegacy ? 0x2700 : 0xef00);
+	WinPartedDll::SetPartType(console, WindowsSetup::GetLogger(), p1Disk, p1Offset, WindowsSetup::UseLegacy ? 0x2700 : 0xef00);
 
 	logger->Write(PANTHER_LL_DETAILED, L"Successfully prepared the newly installed OS for booting.");
 }

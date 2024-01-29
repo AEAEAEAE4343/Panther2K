@@ -29,15 +29,14 @@ public:
 	static void LoadPhase(int phase);
 	static bool KeyHandler(WPARAM wParam);
 	static void LoadPage(Page* page);
+	static void RequestExit();
 
 	// Partition selection (phase 4)
 	static void SelectPartition(int stringIndex, VOLUME_INFO volume);
 	static void SelectNextPartition(int index);
 
 	// WinParted functions
-	static int RunPartitionManager();
 	static bool SelectPartitionsWithDisk(int diskNumber);
-	static bool SetPartitionType(int disk, unsigned long long offset, short type);
 
 	// Drivers
 	static void LoadDrivers();
@@ -122,5 +121,6 @@ private:
 	static LibPanther::Logger* logger;
 	static Console* console;
 	static Page* currentPage;
+	static bool exitRequested;
 };
 

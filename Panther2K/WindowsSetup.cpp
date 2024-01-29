@@ -10,13 +10,13 @@
 #include "MessageBoxPage.h"
 #include "PartitionSelectionPage.h"
 #include "DiskSelectionPage.h"
+#include "WinPartedDll.h"
 
 #include "Gdiplus.h"
 using namespace Gdiplus;
 #pragma comment (lib,"Gdiplus.lib")
 
 #include "Resource.h"
-#include "iatpatch.h"
 #include <Shlwapi.h>
 #include "pathcch.h"
 
@@ -72,8 +72,7 @@ int WindowsSetup::RebootTimer = 10000;
 Console* WindowsSetup::console = 0;
 LibPanther::Logger* WindowsSetup::logger = 0;
 Page* WindowsSetup::currentPage = 0;
-
-bool isPartedLoaded = false;
+bool WindowsSetup::exitRequested = false;
 
 void DoEvents()
 {
@@ -587,12 +586,6 @@ bool WindowsSetup::LoadConfig()
 	return true;
 }
 
-int WindowsSetup::RunPartitionManager() 
-{
-	
-	return 0;
-}
-
 void WindowsSetup::LoadDrivers()
 {
 	logger->Write(PANTHER_LL_DETAILED, L"Loading drivers for installation...");
@@ -817,6 +810,8 @@ int WindowsSetup::RunSetup()
 		!record->bKeyDown || KeyHandler(record->wVirtualKeyCode);
 		record = console->Read()) {
 		free(record);
+		if (exitRequested)
+			break;
 	}
 
 	// Stop GDI+
@@ -925,29 +920,7 @@ void WindowsSetup::LoadPhase(int phase)
 }
 
 bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
-{
-	// Try loading WinParted
-	typedef void (*InitializeCRT)();
-	typedef HRESULT(*ApplyP2KLayoutToDisk)(Console*, LibPanther::Logger*, int, bool, wchar_t***, wchar_t***);
-	typedef HRESULT(*ApplyP2KLayoutToDisk)(Console*, LibPanther::Logger*, int, bool, wchar_t***, wchar_t***);
-
-	auto winParted = LoadLibraryA("WinParted.exe");
-	if (!winParted) 
-	{
-		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occured while preparing the disk. WinParted could not be loaded.", false, currentPage);
-		msgBox->ShowDialog();
-		delete msgBox;
-		return false;
-	}
-
-	if (!isPartedLoaded)
-	{
-		ParseIAT(winParted);
-		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, ORD_InitializeCRT);
-		initializeCRT();
-		isPartedLoaded = true;
-	}
-	
+{	
 	// Has to be on the heap, otherwise the partition manager can't read it
 	wchar_t** mountPoints = (wchar_t**)safeMalloc(logger, sizeof(wchar_t*) * 3);
 	for (int i = 0; i < 3; i++)
@@ -957,8 +930,8 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 	for (int i = 0; i < 3; i++)
 		volumeList[i] = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * MAX_PATH);
 
-	auto applyLayout = (ApplyP2KLayoutToDisk)GetProcAddress(winParted, UseLegacy ? ORD_ApplyP2KLayoutToDiskMBR : ORD_ApplyP2KLayoutToDiskGPT);
-	HRESULT res = applyLayout(console, logger, diskNumber, IsWinPE, &mountPoints, &volumeList);
+	HRESULT res = (UseLegacy ? WinPartedDll::ApplyP2KLayoutToDiskMBR : WinPartedDll::ApplyP2KLayoutToDiskGPT)
+		(console, logger, diskNumber, IsWinPE, &mountPoints, &volumeList);
 
 	if (res != ERROR_SUCCESS)
 	{
@@ -1186,32 +1159,9 @@ void WindowsSetup::LoadPage(Page* page)
 	currentPage = page;
 }
 
-//__declspec(dllexport) bool SetPartType(Console* console, int diskNumber, unsigned long long partOffset, short partType) 
-bool WindowsSetup::SetPartitionType(int disk, unsigned long long offset, short type)
+void WindowsSetup::RequestExit()
 {
-	// Try loading WinParted
-	typedef void (*InitializeCRT)();
-	typedef bool(*SetPartType)(Console*, LibPanther::Logger*, int, unsigned long long, short);
-
-	auto winParted = LoadLibraryA("WinParted.exe");
-	if (!winParted)
-	{
-		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occured while preparing the disk. WinParted could not be loaded.", false, currentPage);
-		msgBox->ShowDialog();
-		delete msgBox;
-		return false;
-	}
-
-	if (!isPartedLoaded)
-	{
-		ParseIAT(winParted);
-		auto initializeCRT = (InitializeCRT)GetProcAddress(winParted, ORD_InitializeCRT);
-		initializeCRT();
-		isPartedLoaded = true;
-	}
-
-	auto setType = (SetPartType)GetProcAddress(winParted, ORD_SetPartType);
-	return setType(console, logger, disk, offset, type);
+	exitRequested = true;
 }
 
 int EndsWith(const wchar_t* str, const wchar_t* suffix)

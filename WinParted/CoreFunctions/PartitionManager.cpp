@@ -393,7 +393,7 @@ PartitionTableType PartitionManager::GetPartitionTableType(DISK_INFORMATION* dis
 	return (PartitionTableType)type;
 }
 
-bool PartitionManager::LoadDisk(DISK_INFORMATION* diskInfo)
+bool PartitionManager::LoadDisk(DISK_INFORMATION* diskInfo, bool forceOperatingMode)
 {
 	PartitionTableType table = GetPartitionTableType(diskInfo);
 
@@ -406,7 +406,7 @@ bool PartitionManager::LoadDisk(DISK_INFORMATION* diskInfo)
 
 	// GPT with hybrid MBR is not recommended
 	// and should only be modified with care
-	if (table == PartitionTableType::GPT_HMBR)
+	if (!forceOperatingMode && table == PartitionTableType::GPT_HMBR)
 	{
 		MessagePageResult r = ShowMessagePage(L"The partition table on the disk is a GPT with a hybrid MBR structure. A hybrid MBR could cause significant damage to your data when used incorrectly. Would you like to modify the GPT? Selecting No will load the hybrid MBR instead.", MessagePageType::YesNoCancel, MessagePageUI::Warning);
 		switch (r)
@@ -423,7 +423,7 @@ bool PartitionManager::LoadDisk(DISK_INFORMATION* diskInfo)
 			return false;
 		}
 	}
-	else
+	else if (!forceOperatingMode)
 		CurrentDiskOperatingMode = (int)table & (int)PartitionTableType::GPT ? OperatingMode::GPT : OperatingMode::MBR;
 
 	CurrentDisk = *diskInfo;
@@ -692,7 +692,7 @@ bool PartitionManager::SavePartitionTableToDisk()
 
 	for (int i = 0; i < DiskInformationTableSize; i++)
 		if (DiskInformationTable[i].DiskNumber == CurrentDisk.DiskNumber)
-			LoadDisk(&DiskInformationTable[i]);
+			LoadDisk(&DiskInformationTable[i], true);
 
 	CloseHandle(hDisk);
 	CurrentPage->SetStatusText(oldStatus);

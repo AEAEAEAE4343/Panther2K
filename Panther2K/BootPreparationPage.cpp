@@ -552,6 +552,14 @@ void BootPreparationPage::PrepareBootFilesNew()
 	}
 
 	/*
+	* TODO: SETUP WINDOWS RECOVERY ENVIRONMENT
+	* 1. Create files
+	* 2. Create recovery entry
+	* 3. Configure using reagentc
+	* 4. Set partition type to recovery
+	*/
+
+	/*
 	* Convert the hive into a system hive
 	* This is done through the registry as bcdedit does not allow this
 	* This is REQUIRED for bcdedit to work in the installed system 
@@ -610,7 +618,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 
 	/*
 	* Set partition type for EFI or System partition
-	* This is REQUIRED for sysprep to succeed
+	* This is REQUIRED for sysprep to succeed on UEFI, optional for Legacy
 	*/
 	logger->Write(PANTHER_LL_DETAILED, L"Setting partition type of the boot partition...");
 	WinPartedDll::SetPartType(console, WindowsSetup::GetLogger(), p1Disk, p1Offset, WindowsSetup::UseLegacy ? 0x2700 : 0xef00);

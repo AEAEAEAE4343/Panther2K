@@ -130,9 +130,10 @@ void PartitionSelectionPage::EnumeratePartitions()
 				MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to enumerate partitions: Access denied. Please re-run Panther2K as Administrator. Panther2K will exit.", true, this);
 				msgBox->ShowDialog();
 				delete msgBox;
-				PostQuitMessage(0);
+				WindowsSetup::RequestExit();
 				return;
 			}
+			else goto cleanup;
 		}
 
 		do

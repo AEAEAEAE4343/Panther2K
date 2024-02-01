@@ -121,7 +121,7 @@ void DiskSelectionPage::RunPage()
 			Update();
 			break;
 		case VK_RETURN:
-			if (PartitionManager::LoadDisk(PartitionManager::DiskInformationTable + (scrollIndex + selectionIndex)))
+			if (PartitionManager::LoadDisk(PartitionManager::DiskInformationTable + (scrollIndex + selectionIndex), false))
 			{
 				DiskPartitioningPage* page = new DiskPartitioningPage();
 				PartitionManager::PushPage(page);

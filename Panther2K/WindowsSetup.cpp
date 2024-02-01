@@ -881,6 +881,7 @@ void WindowsSetup::LoadPhase(int phase)
 		page = new WimApplyPage();
 		LoadPage(page);
 		((WimApplyPage*)page)->ApplyImage();
+		if (exitRequested) return;
 
 		// Install drivers
 		page = new Page();
@@ -893,6 +894,7 @@ void WindowsSetup::LoadPhase(int phase)
 		page = new BootPreparationPage();
 		LoadPage(page);
 		((BootPreparationPage*)page)->PrepareBootFilesNew();
+		if (exitRequested) return;
 		// Doing this is going to produce the following call stack:
 		//   
 		//   WindowsSetup::RunSetup()

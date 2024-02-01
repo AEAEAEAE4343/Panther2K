@@ -85,7 +85,7 @@ public:
 
 	static void PopulateDiskInformation();
 	static PartitionTableType GetPartitionTableType(DISK_INFORMATION* diskInfo);
-	static bool LoadDisk(DISK_INFORMATION* diskInfo);
+	static bool LoadDisk(DISK_INFORMATION* diskInfo, bool forceOperatingMode);
 
 	//
 	// Partition table manipulation

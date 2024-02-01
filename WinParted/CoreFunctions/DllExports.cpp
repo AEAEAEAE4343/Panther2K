@@ -13,6 +13,7 @@ extern "C" void _stdcall InitializeCRT()
 
 extern "C" int _stdcall RunWinParted(Console* console, LibPanther::Logger* logger)
 {
+	PartitionManager::SetLogger(logger);
 	int result = PartitionManager::RunWinParted(console);
 	return result;
 };
@@ -167,6 +168,7 @@ extern "C" HRESULT _stdcall ApplyP2KLayoutToDiskMBR(Console* console, LibPanther
 
 	PartitionManager::ShowNoInfoDialogs = true;
 	PartitionManager::SetConsole(console);
+	PartitionManager::SetLogger(logger);
 
 	// Show loading screen
 	PartitionManager::CurrentPage = new Page();
@@ -290,7 +292,7 @@ exit:
 bool LoadPartitionFromOffset(int diskNumber, unsigned long long partOffset)
 {
 	PartitionManager::PopulateDiskInformation();
-	if (!PartitionManager::LoadDisk(&PartitionManager::DiskInformationTable[diskNumber])) return false;
+	if (!PartitionManager::LoadDisk(&PartitionManager::DiskInformationTable[diskNumber], false)) return false;
 	
 	for (int i = 0; i < PartitionManager::CurrentDiskPartitionCount; i++)
 	{

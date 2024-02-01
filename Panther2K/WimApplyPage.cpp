@@ -150,7 +150,7 @@ void WimApplyPage::WimMessageLoop()
 		MessageBoxPage* msgBox = new MessageBoxPage(L"The installation has failed. See the installation log for more details.", true, this);
 		msgBox->ShowDialog();
 		delete msgBox;
-		exit(hResult);
+		WindowsSetup::RequestExit();
 	}
 
 end:

@@ -1,6 +1,7 @@
 #include "DiskSelectionPage.h"
 #include "WindowsSetup.h"
 #include "QuitingPage.h"
+#include "MessageBoxPage.h"
 
 void GetSizeStringFromBytes(unsigned long long bytes, wchar_t buffer[10])
 {
@@ -57,6 +58,22 @@ void DiskSelectionPage::Init()
 
 			swprintf_s(buffer, L"\\\\.\\\PHYSICALDRIVE%d", diskInfo[i].diskNumber);
 			diskFileHandle = CreateFileW(buffer, FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
+			if (diskFileHandle == INVALID_HANDLE_VALUE)
+			{
+				if (GetLastError() == 5)
+				{
+					MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to enumerate disks: Access denied. Please re-run Panther2K as Administrator. Panther2K will exit.", true, this);
+					msgBox->ShowDialog();
+					delete msgBox;
+					WindowsSetup::RequestExit();
+					return;
+				}
+				else
+				{
+					diskCount--;
+					continue;
+				}
+			}
 
 			if (!DeviceIoControl(diskFileHandle, IOCTL_DISK_GET_DRIVE_GEOMETRY, NULL, 0, &dg, sizeof(dg), &byteCount, NULL))
 			{

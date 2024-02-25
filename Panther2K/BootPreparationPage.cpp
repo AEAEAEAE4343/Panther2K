@@ -246,6 +246,9 @@ void BootPreparationPage::PrepareBootFilesNew()
 	W:\ = WindowsSetup::Partition3Mount
 	*/
 
+	// TODO: Implement error handlers
+	// TODO: Fix VHD redirection
+
 	/*
 	* Determine if Partition1 and Partition3 are on the same disk
 	* (i.e. If the system partition is on the same disk as the boot partition.)
@@ -558,6 +561,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 	* 3. Configure using reagentc
 	* 4. Set partition type to recovery
 	*/
+	if (WindowsSetup::UseRecovery) 
+	{
+
+	}
 
 	/*
 	* Convert the hive into a system hive

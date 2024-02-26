@@ -54,6 +54,61 @@ BOOL SetPrivilege(
 	return TRUE;
 }
 
+int CreateProcessPiped(char* outputBuffer, int bufferSize, wchar_t* commandLine) 
+{
+	// Create pipe for redirecting STDOUT
+	HANDLE stdOutRd;
+	HANDLE stdOutWr;
+	SECURITY_ATTRIBUTES attributes = { 0 };
+	attributes.bInheritHandle = TRUE;
+	attributes.nLength = sizeof(SECURITY_ATTRIBUTES);
+	if (!CreatePipe(&stdOutRd, &stdOutWr, &attributes, 0))
+	{
+		// Failed
+		int temp = GetLastError();
+		WindowsSetup::ShowError(L"Failed to create pipe. %s", temp, PANTHER_LL_BASIC);
+		return;
+	}
+	STARTUPINFOW si = { 0 };
+	si.cb = sizeof(STARTUPINFOW);
+	si.dwFlags = STARTF_USESTDHANDLES;
+	si.hStdOutput = stdOutWr;
+
+	PROCESS_INFORMATION pi = { 0 };
+	if (!CreateProcessW(NULL, commandLine, NULL, NULL, TRUE, NULL, NULL, NULL, &si, &pi))
+	{
+		// Failed
+		int temp = GetLastError();
+		WindowsSetup::ShowError(L"Failed to create OS loader entry. %s", temp, PANTHER_LL_BASIC);
+		return;
+	}
+
+	// Close all handles except stdOutRd
+	// We know bcdedit is done when stdOutRd receives an EOF
+	CloseHandle(stdOutWr);
+	CloseHandle(pi.hProcess);
+	CloseHandle(pi.hThread);
+
+	// Read until the end of the pipe is reached or when the buffer is full
+	DWORD bytesRead;
+	BOOL retCode;
+	for (char* buffer = outputBuffer; (buffer - outputBuffer < bufferSize) && (retCode = ReadFile(stdOutRd, buffer, 1, &bytesRead, NULL)); buffer += bytesRead);
+	
+	// Check the error code
+	if (int temp = GetLastError() && temp != ERROR_BROKEN_PIPE)
+		return temp;
+
+	// If the end of the pipe was not reached but the buffer is full, read it to the end
+	CHAR voidBuffer;
+	while (retCode) retCode = ReadFile(stdOutRd, &voidBuffer, 1, &bytesRead, NULL);
+	
+	// Check the error code again to make sure nothing went wrong
+	if (int temp = GetLastError() != ERROR_BROKEN_PIPE)
+		return temp;
+
+	return ERROR_SUCCESS;
+}
+
 BootPreparationPage::~BootPreparationPage()
 {
 	free((wchar_t*)text);
@@ -424,61 +479,24 @@ void BootPreparationPage::PrepareBootFilesNew()
 	* Add Windows Boot Loader entry
 	*/
 
-	// Create pipe for redirecting STDOUT
-	HANDLE stdOutRd;
-	HANDLE stdOutWr;
-	SECURITY_ATTRIBUTES attributes = { 0 };
-	attributes.bInheritHandle = TRUE;
-	attributes.nLength = sizeof(SECURITY_ATTRIBUTES);
-	if (!CreatePipe(&stdOutRd, &stdOutWr, &attributes, 0)) 
-	{
-		// Failed
-		int temp = GetLastError();
-		WindowsSetup::ShowError(L"Failed to create pipe. %s", temp, PANTHER_LL_BASIC);
-		return;
-	}
 
 	// Call bcdedit while redirecting stdout
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /create /application osloader"
 													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /create /application osloader", WindowsSetup::Partition1Mount);
-	STARTUPINFOW si = { 0 };
-	si.cb = sizeof(STARTUPINFOW);
-	si.dwFlags = STARTF_USESTDHANDLES;
-	si.hStdOutput = stdOutWr;
+	
 
-	PROCESS_INFORMATION pi = { 0 };
-	if (!CreateProcessW(NULL, commandBuffer, NULL, NULL, TRUE, NULL, NULL, NULL, &si, &pi)) 
+	// Read the GUID of the created osloader entry
+	char guidBuffer[256];
+	if (int temp = CreateProcessPiped(guidBuffer, 256, commandBuffer)) 
 	{
-		// Failed
-		int temp = GetLastError();
-		WindowsSetup::ShowError(L"Failed to create OS loader entry. %s", temp, PANTHER_LL_BASIC);
+		// Failed - no guid
+		WindowsSetup::ShowError(L"Failed to retrieve OS loader GUID. %s", ERROR_INVALID_DATA, PANTHER_LL_BASIC);
 		return;
 	}
 
-	// Close all handles except stdOutRd
-	// We know bcdedit is done when stdOutRd receives an EOF
-	CloseHandle(stdOutWr);
-	CloseHandle(pi.hProcess);
-	CloseHandle(pi.hThread);
-
+	// Convert the string containing the GUID into a wide char string
 	wchar_t guidString[128];
-	char guidBuffer[128];
-	DWORD bytesRead;
-	BOOL retCode;
-
-	// TODO: Make this code clean
-	// Read until the end of the pipe is reached or when the buffer is full
-	for (char* buffer = guidBuffer; (buffer - guidBuffer < 128) && (retCode = ReadFile(stdOutRd, buffer, 1, &bytesRead, NULL)); buffer += bytesRead);
 	MultiByteToWideChar(GetConsoleCP(), MB_PRECOMPOSED, guidBuffer, 128, guidString, 128);
-
-	// If the end of the pipe was not reached, read it to the end
-	while (retCode) retCode = ReadFile(stdOutRd, guidBuffer, 1, &bytesRead, NULL);
-	if (int temp = GetLastError() != ERROR_BROKEN_PIPE)
-	{
-		// Failed
-		WindowsSetup::ShowError(L"Failed to retrieve OS loader GUID. %s", temp, PANTHER_LL_BASIC);
-		return;
-	}
 
 	// Find GUID of created entry
 	guidString[127] = 0;
@@ -494,7 +512,9 @@ void BootPreparationPage::PrepareBootFilesNew()
 	/*
 	* Configure Windows Boot Loader entry
 	*/
+
 	logger->Write(PANTHER_LL_DETAILED, L"Configuring Windows Boot Loader...");
+	
 	// Set it to default
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /default %s"
 													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /default %s", WindowsSetup::Partition1Mount, guid);

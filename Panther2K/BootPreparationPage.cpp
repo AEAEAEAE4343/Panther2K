@@ -312,11 +312,13 @@ void BootPreparationPage::PrepareBootFilesNew()
 	{
 		// Failed
 		int temp = GetLastError();
+		WindowsSetup::ShowError(L"Failed to create directory for boot files. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 	if (int temp = SHFileOperationW(&fos))
 	{
 		// Failed
+		WindowsSetup::ShowError(L"Failed to copy boot files. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -332,6 +334,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 		{
 			// Failed
 			int temp = GetLastError();
+			WindowsSetup::ShowError(L"Failed to create directory for boot files. %s", temp, PANTHER_LL_BASIC);
 			return;
 		}
 	}
@@ -347,6 +350,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (int temp = SHFileOperationW(&fos))
 	{
 		// Failed
+		WindowsSetup::ShowError(L"Failed to copy boot files. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -369,9 +373,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 		*/
 		swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /createstore %sBoot\\BCD"
 														  : L"bcdedit /createstore %sEFI\\Microsoft\\Boot\\BCD", WindowsSetup::Partition1Mount);
-		if (_wsystem(commandBuffer))
+		if (int temp = _wsystem(commandBuffer))
 		{
 			// Failed
+			WindowsSetup::ShowError(L"Failed to create BCD store. %s", temp, PANTHER_LL_BASIC);
 			return;
 		}
 
@@ -380,9 +385,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 		*/
 		swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /create {bootmgr}"
 														  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /create {bootmgr}", WindowsSetup::Partition1Mount);
-		if (_wsystem(commandBuffer))
+		if (int temp = _wsystem(commandBuffer))
 		{
 			// Failed
+			WindowsSetup::ShowError(L"Failed to create {bootmgr} entry. %s", temp, PANTHER_LL_BASIC);
 			return;
 		}
 
@@ -395,16 +401,18 @@ void BootPreparationPage::PrepareBootFilesNew()
 			WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD",
 			singleDisk ? L"hd_partition=" : L"partition=",
 			WindowsSetup::Partition1Mount);
-		if (_wsystem(commandBuffer))
+		if (int temp = _wsystem(commandBuffer))
 		{
 			// Failed
+			WindowsSetup::ShowError(L"Failed to configure {bootmgr} entry. %s", temp, PANTHER_LL_BASIC);
 			return;
 		}
 		swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /set {bootmgr} path \\bootmgr"
 														  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {bootmgr} path \\EFI\\Microsoft\\Boot\\bootmgfw.efi", WindowsSetup::Partition1Mount);
-		if (_wsystem(commandBuffer))
+		if (int temp = _wsystem(commandBuffer))
 		{
 			// Failed
+			WindowsSetup::ShowError(L"Failed to configure {bootmgr} entry. %s", temp, PANTHER_LL_BASIC);
 			return;
 		}
 
@@ -429,6 +437,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	{
 		// Failed
 		int temp = GetLastError();
+		WindowsSetup::ShowError(L"Failed to create pipe. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -445,6 +454,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	{
 		// Failed
 		int temp = GetLastError();
+		WindowsSetup::ShowError(L"Failed to create OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -459,16 +469,17 @@ void BootPreparationPage::PrepareBootFilesNew()
 	DWORD bytesRead;
 	BOOL retCode;
 
+	// TODO: Make this code clean
 	// Read until the end of the pipe is reached or when the buffer is full
 	for (char* buffer = guidBuffer; (buffer - guidBuffer < 128) && (retCode = ReadFile(stdOutRd, buffer, 1, &bytesRead, NULL)); buffer += bytesRead);
 	MultiByteToWideChar(GetConsoleCP(), MB_PRECOMPOSED, guidBuffer, 128, guidString, 128);
 
 	// If the end of the pipe was not reached, read it to the end
 	while (retCode) retCode = ReadFile(stdOutRd, guidBuffer, 1, &bytesRead, NULL);
-	if (GetLastError() != ERROR_BROKEN_PIPE)
+	if (int temp = GetLastError() != ERROR_BROKEN_PIPE)
 	{
 		// Failed
-		int temp = GetLastError();
+		WindowsSetup::ShowError(L"Failed to retrieve OS loader GUID. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -478,6 +489,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (guid == 0)
 	{
 		// Failed - no guid
+		WindowsSetup::ShowError(L"Failed to retrieve OS loader GUID. %s", ERROR_INVALID_DATA, PANTHER_LL_BASIC);
 		return;
 	}
 	guid[38] = 0;
@@ -489,9 +501,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 	// Set it to default
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /default %s"
 													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /default %s", WindowsSetup::Partition1Mount, guid);
-	if (_wsystem(commandBuffer))
+	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
+		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 	// osdevice = W:
@@ -500,9 +513,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD",
 		singleDisk ? L"hd_partition=" : L"partition=",
 		WindowsSetup::Partition3Mount);
-	if (_wsystem(commandBuffer))
+	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
+		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 	// device = W:
@@ -511,25 +525,28 @@ void BootPreparationPage::PrepareBootFilesNew()
 		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD",
 		singleDisk ? L"hd_partition=" : L"partition=",
 		WindowsSetup::Partition3Mount);
-	if (_wsystem(commandBuffer))
+	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
+		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 	// systemroot = \Windows
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /set {default} systemroot \\Windows"
 													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {default} systemroot \\Windows", WindowsSetup::Partition1Mount);
-	if (_wsystem(commandBuffer))
+	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
+		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 	// path = \Windows\System32\winload.exe / .efi
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /set {default} path \\Windows\\System32\\winload.exe"
 													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {default} path \\Windows\\System32\\winload.efi", WindowsSetup::Partition1Mount);
-	if (_wsystem(commandBuffer))
+	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
+		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -538,9 +555,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 		WindowsSetup::Partition1Mount,
 		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD");
 
-	if (_wsystem(commandBuffer))
+	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
+		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -548,9 +566,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 		WindowsSetup::Partition1Mount,
 		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD");
 
-	if (_wsystem(commandBuffer))
+	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
+		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -588,9 +607,12 @@ void BootPreparationPage::PrepareBootFilesNew()
 	else
 	{
 		// Failed
+		int temp = GetLastError();
+		WindowsSetup::ShowError(L"Failed to convert BCD into system hive. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
+	// TODO: Add error checking here
 	// Set the settings for system hives
 	LSTATUS status;
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"%sBoot\\BCD" : L"%sEFI\\Microsoft\\Boot\\BCD", WindowsSetup::Partition1Mount);
@@ -605,9 +627,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 	status = RegCloseKey(bcdKey);
 	status = RegUnLoadKeyW(HKEY_LOCAL_MACHINE, L"p2k_bcd");
 
-	// Restore privileges
+	// Restore privileges and close token
 	SetPrivilege(tokenHandle, SE_RESTORE_NAME, FALSE);
 	SetPrivilege(tokenHandle, SE_BACKUP_NAME, FALSE);
+	CloseHandle(tokenHandle);
 
 	/*
 	* Configure boot sector for Legacy
@@ -616,9 +639,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 	{
 		logger->Write(PANTHER_LL_DETAILED, L"Writing legacy boot sector...");
 		swprintf_s(commandBuffer, L"bootsect /nt60 %c: /force /mbr", WindowsSetup::Partition1Mount[0]);
-		if (_wsystem(commandBuffer))
+		if (int temp = _wsystem(commandBuffer))
 		{
 			// Failed
+			WindowsSetup::ShowError(L"Failed to write boot sector. %s", temp, PANTHER_LL_BASIC);
 			return;
 		}
 	}

@@ -1291,6 +1291,28 @@ void WindowsSetup::EnumerateImageInfo()
 	WimImageInfos = pointer;
 }
 
+void WindowsSetup::ShowError(const wchar_t* errorMessage, int systemError, int logLevel)
+{
+	wchar_t displayedMessage[1024];
+	wchar_t* systemMessage;
+	if (!FormatMessageW(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM, NULL, systemError, MAKELANGID(LANG_ENGLISH, SUBLANG_ENGLISH_US), (LPWSTR)&systemMessage, 128, NULL))
+	{
+		systemMessage = (wchar_t*)LocalAlloc(LMEM_FIXED, 128 * sizeof(wchar_t));
+		if (systemMessage)
+			swprintf_s(systemMessage, 128, L"Error code 0x%08X. Failed to retrieve a localized message of the error (0x%08X).", systemError, GetLastError());
+		else
+			logger->Write(logLevel, L"WARNING: failed to format error code.");
+	}
+	swprintf_s(displayedMessage, errorMessage, systemMessage);
+	LocalFree(systemMessage);
+
+	logger->Write(logLevel, displayedMessage);
+	
+	MessageBoxPage* msgBox = new MessageBoxPage(displayedMessage, true, currentPage);
+	msgBox->ShowDialog();
+	delete msgBox;
+}
+
 LibPanther::Logger* WindowsSetup::GetLogger()
 {
 	return logger;

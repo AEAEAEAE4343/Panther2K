@@ -47,6 +47,8 @@ public:
 	static void GetWimImageCount();
 	static void EnumerateImageInfo();
 
+	static void ShowError(const wchar_t* errorMessage, int systemError, int logLevel);
+
 	static LibPanther::Logger* GetLogger();
 
 	/*

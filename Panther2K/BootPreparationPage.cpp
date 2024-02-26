@@ -672,7 +672,6 @@ void BootPreparationPage::PrepareBootFilesNew()
 	logger->Write(PANTHER_LL_DETAILED, L"Setting partition type of the boot partition...");
 	WinPartedDll::SetPartType(console, WindowsSetup::GetLogger(), p1Disk, p1Offset, WindowsSetup::UseLegacy ? 0x2700 : 0xef00);
 	
-
 	logger->Write(PANTHER_LL_DETAILED, L"Successfully prepared the newly installed OS for booting.");
 }
 

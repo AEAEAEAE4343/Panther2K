@@ -521,9 +521,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
-		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
+		WindowsSetup::ShowError(L"Failed to configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
+
 	// osdevice = W:
 	swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {default} osdevice %s%s",
 		WindowsSetup::Partition1Mount,
@@ -533,9 +534,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
-		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
+		WindowsSetup::ShowError(L"Failed to configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
+
 	// device = W:
 	swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {default} device %s%s",
 		WindowsSetup::Partition1Mount,
@@ -545,7 +547,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
-		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
+		WindowsSetup::ShowError(L"Failed to configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 	// systemroot = \Windows
@@ -554,7 +556,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
-		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
+		WindowsSetup::ShowError(L"Failed to configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 	// path = \Windows\System32\winload.exe / .efi
@@ -563,7 +565,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
-		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
+		WindowsSetup::ShowError(L"Failed to configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -575,7 +577,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
-		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
+		WindowsSetup::ShowError(L"Failed to configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -586,7 +588,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
-		WindowsSetup::ShowError(L"Failed to retrieve configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
+		WindowsSetup::ShowError(L"Failed to configure OS loader entry. %s", temp, PANTHER_LL_BASIC);
 		return;
 	}
 
@@ -670,6 +672,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	*/
 	logger->Write(PANTHER_LL_DETAILED, L"Setting partition type of the boot partition...");
 	WinPartedDll::SetPartType(console, WindowsSetup::GetLogger(), p1Disk, p1Offset, WindowsSetup::UseLegacy ? 0x2700 : 0xef00);
+	
 
 	logger->Write(PANTHER_LL_DETAILED, L"Successfully prepared the newly installed OS for booting.");
 }

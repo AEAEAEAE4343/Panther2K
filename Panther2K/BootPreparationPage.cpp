@@ -484,7 +484,6 @@ void BootPreparationPage::PrepareBootFilesNew()
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /create /application osloader"
 													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /create /application osloader", WindowsSetup::Partition1Mount);
 	
-
 	// Read the GUID of the created osloader entry
 	char guidBuffer[256];
 	if (int temp = CreateProcessPiped(guidBuffer, 256, commandBuffer)) 
@@ -581,7 +580,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 		return;
 	}
 
-	swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {bootmgr} displayorder {default}",
+	swprintf_s(commandBuffer, L"bcdedit /store %s%s /displayorder {default} /addfirst",
 		WindowsSetup::Partition1Mount,
 		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD");
 

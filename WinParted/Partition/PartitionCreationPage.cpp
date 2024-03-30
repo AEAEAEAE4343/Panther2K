@@ -31,6 +31,8 @@
 
 void PartitionCreationPage::InitPage()
 {
+	// TODO: Implement sector alignment
+
 	SetStatusText(L"");
 	sizeString[0] = L'\x0';
 
@@ -184,6 +186,7 @@ void PartitionCreationPage::UpdatePage()
 				swprintf_s(buffer, bufferSize, L"After partition %d", unallocatedSpans[j / 2].partitionA);
 
 		int length = lstrlenW(buffer);
+		// TODO: Make the zero not show up because it is confusing
 		swprintf_s(buffer + length, bufferSize - length, L"%*s%-11llu  %-11llu  %-9d", consoleSize.cx - 12 - length - 36,
 			L"", j % 2 ? 0 : unallocatedSpans[j / 2].startSector, j % 2 ? unallocatedSpans[j / 2].endSector : 0,
 			unallocatedSpans[j / 2].GetSize());
@@ -219,6 +222,24 @@ void PartitionCreationPage::RunPage()
 	{
 		switch (key->wVirtualKeyCode)
 		{
+		case '0':
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+		case '8':
+		case '9':
+			// TODO: Size input
+			break;
+		case VK_BACK:
+			// TODO: Size input
+			break;
+		case VK_RETURN:
+			// TODO: Create the partition
+			break;
 		case VK_DOWN:
 			if (enteringSize)
 				break;

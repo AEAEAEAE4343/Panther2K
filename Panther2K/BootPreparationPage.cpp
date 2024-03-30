@@ -67,7 +67,7 @@ int CreateProcessPiped(char* outputBuffer, int bufferSize, wchar_t* commandLine)
 		// Failed
 		int temp = GetLastError();
 		WindowsSetup::ShowError(L"Failed to create pipe. %s", temp, PANTHER_LL_BASIC);
-		return;
+		return temp;
 	}
 	STARTUPINFOW si = { 0 };
 	si.cb = sizeof(STARTUPINFOW);
@@ -80,7 +80,7 @@ int CreateProcessPiped(char* outputBuffer, int bufferSize, wchar_t* commandLine)
 		// Failed
 		int temp = GetLastError();
 		WindowsSetup::ShowError(L"Failed to create OS loader entry. %s", temp, PANTHER_LL_BASIC);
-		return;
+		return temp;
 	}
 
 	// Close all handles except stdOutRd
@@ -95,7 +95,7 @@ int CreateProcessPiped(char* outputBuffer, int bufferSize, wchar_t* commandLine)
 	for (char* buffer = outputBuffer; (buffer - outputBuffer < bufferSize) && (retCode = ReadFile(stdOutRd, buffer, 1, &bytesRead, NULL)); buffer += bytesRead);
 	
 	// Check the error code
-	if (int temp = GetLastError() && temp != ERROR_BROKEN_PIPE)
+	if (int temp = GetLastError() != ERROR_BROKEN_PIPE)
 		return temp;
 
 	// If the end of the pipe was not reached but the buffer is full, read it to the end

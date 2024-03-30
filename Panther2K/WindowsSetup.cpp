@@ -683,7 +683,8 @@ void WindowsSetup::InstallDrivers()
 				swprintf_s(buffer, MAX_PATH * 2, L"Installing driver %s...", ffd.cFileName);
 				logger->Write(PANTHER_LL_DETAILED, buffer);
 
-				swprintf_s(commandBuffer, MAX_PATH + 25, L"dism /image:\"%s\" /add-driver /driver:\".\\drivers\\%s\"", Partition1Mount, ffd.cFileName);
+				swprintf_s(commandBuffer, MAX_PATH + 25, L"dism /image:\"%s\\\" /add-driver /driver:\".\\drivers\\%s\"", Partition3Mount, ffd.cFileName);
+				logger->Write(PANTHER_LL_NORMAL, commandBuffer);
 				int ret = _wsystem(commandBuffer);
 				if (ret)
 				{

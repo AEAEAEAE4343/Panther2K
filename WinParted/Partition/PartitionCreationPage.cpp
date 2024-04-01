@@ -232,8 +232,16 @@ void PartitionCreationPage::RunPage()
 		case '7':
 		case '8':
 		case '9':
+		{
+			wchar_t lastChar = sizeString[lstrlenW(sizeString) - 2];
+			if (lastChar < L'0' || lastChar > L'9')
+				break;
 			// TODO: Size input
 			break;
+		}
+		case 'M':
+		case 'G':
+		case 'T':
 		case VK_BACK:
 			// TODO: Size input
 			break;

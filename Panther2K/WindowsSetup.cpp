@@ -1,5 +1,5 @@
 ﻿#include "WindowsSetup.h"
-#include "..\rapidxml.1.13.0\build\native\include\rapidxml\rapidxml.hpp"
+#include "..\RapidXML\RapidXML\rapidxml.hpp"
 
 #include "WelcomePage.h"
 #include "ImageSelectionPage.h"
@@ -1209,15 +1209,18 @@ void WindowsSetup::GetWimImageCount()
 char* getCharPointer(wchar_t* string, int count = -1)
 {
 	if (count == -1)
-		count = lstrlenW(string);
+		count = lstrlenW(string) + 1;
 	char* oldtext = (char*)string;
 	char* text = (char*)malloc(sizeof(char) * count);
 	if (text == 0)
 		return NULL;
-	for (int i = 0; i < count; i++)
+	for (int i = 0; i <= count; i++)
 	{
 		int j = i * 2;
-		text[i] = oldtext[j];
+		if (i == count)
+			text[i] = 0;
+		else
+			text[i] = oldtext[j];
 	}
 	return text;
 }
@@ -1249,7 +1252,11 @@ void WindowsSetup::EnumerateImageInfo()
 	WIMGetImageInformation(WimHandle, (PVOID*)&str_ptr, (PDWORD)&str_len);
 	str_ptr++;
 
-	char* xml = getCharPointer(str_ptr, str_len / 2);
+	FILE* file;
+	fopen_s(&file, "dump", "w");
+	char* xml = getCharPointer(str_ptr);
+	fwrite(xml, 1, strlen(xml), file);
+	fclose(file);
 	int count = strlen(xml);
 	doc->parse<0>(xml);
 

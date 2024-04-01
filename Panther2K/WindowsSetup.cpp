@@ -556,6 +556,8 @@ bool WindowsSetup::LoadConfig()
 
 	int columns = GetPrivateProfileIntW(L"Console", L"Columns", 80, INIFile);
 	int rows = GetPrivateProfileIntW(L"Console", L"Rows", 25, INIFile);
+	console->SetSize(columns, rows);
+	
 	int fontHeight = GetPrivateProfileIntW(L"Console", L"FontHeight", 16, INIFile);
 	if (fontHeight == -1)
 	{

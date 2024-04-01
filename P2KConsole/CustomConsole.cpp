@@ -9,6 +9,7 @@
 #define WM_RESIZECONSOLE WM_APP + 1
 #define WM_CLEARCONSOLE WM_APP + 2
 #define WM_UPDATECONSOLE WM_APP + 3
+#define WM_CREATEBUFFER WM_APP + 4
 
 HFONT CustomConsole::font = 0;
 long CustomConsole::fontWidth = 0;
@@ -121,7 +122,7 @@ POINT CustomConsole::GetPosition()
 	return POINT{ screenPointerX, screenPointerY };
 }
 
-void CustomConsole::SetSize(long rows, long columns)
+void CustomConsole::SetSize(long columns, long rows)
 {
 	SIZE t;
 	t.cx = columns; t.cy = rows;
@@ -373,8 +374,16 @@ LRESULT CALLBACK CustomConsole::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPAR
 		PostQuitMessage(0);
 		exit(0);
 	case WM_CREATE:
+	case WM_CREATEBUFFER:
 		hdc = BeginPaint(hWnd, &ps);
 		//hBuf = CreateCompatibleBitmap(hdc, columns * fontWidth, rows * fontHeight);
+
+		if (hdcBuf)
+		{
+			DeleteObject(hdcBuf);
+			DeleteObject(hBuf);
+		}
+
 		hdcBuf = CreateCompatibleDC(hdc);
 		bitmapInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
 		bitmapInfo.bmiHeader.biWidth = columns * fontWidth;
@@ -392,6 +401,7 @@ LRESULT CALLBACK CustomConsole::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPAR
 		SelectObject(hdcBuf, font);
 		SelectObject(hdcBuf, hBuf);
 		EndPaint(hWnd, &ps);
+		break;
 	case WM_KEYDOWN:
 		long style;
 		long exStyle;
@@ -415,7 +425,7 @@ LRESULT CALLBACK CustomConsole::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPAR
 		case VK_HOME:
 			if (!fullScreen)
 			{
-				SetPixelScale(2);
+				SetPixelScale(1);
 			}
 			break;
 		default:
@@ -473,10 +483,10 @@ LRESULT CALLBACK CustomConsole::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPAR
 		SIZE* consoleSize = (SIZE*)wParam;
 		columns = consoleSize->cx;
 		rows = consoleSize->cy;
+		if (screenBuffer) free(screenBuffer);
 		screenBuffer = (DISPLAYCHAR*)malloc(sizeof(DISPLAYCHAR) * columns * rows); 
 		ZeroMemory(screenBuffer, sizeof(DISPLAYCHAR) * columns * rows);
-		fullScreen = !fullScreen;
-		SendMessageW(WindowHandle, WM_KEYDOWN, VK_HOME, 0);
+		SendMessageW(WindowHandle, WM_CREATEBUFFER, VK_HOME, 0);
 		break;
 	}
 	case WM_CLEARCONSOLE:

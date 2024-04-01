@@ -1252,11 +1252,7 @@ void WindowsSetup::EnumerateImageInfo()
 	WIMGetImageInformation(WimHandle, (PVOID*)&str_ptr, (PDWORD)&str_len);
 	str_ptr++;
 
-	FILE* file;
-	fopen_s(&file, "dump", "w");
 	char* xml = getCharPointer(str_ptr);
-	fwrite(xml, 1, strlen(xml), file);
-	fclose(file);
 	int count = strlen(xml);
 	doc->parse<0>(xml);
 
@@ -1267,7 +1263,7 @@ void WindowsSetup::EnumerateImageInfo()
 	rapidxml::xml_node<>* windowsNode;
 	rapidxml::xml_node<>* node;
 
-	for (int i = 1; i <= WimImageCount; i++, imageNode = imageNode->next_sibling())
+	for (int i = 1; i <= WimImageCount; i++, imageNode = imageNode->next_sibling("IMAGE"))
 	{
 		creationTimeNode = imageNode->first_node("CREATIONTIME");
 		windowsNode = imageNode->first_node("WINDOWS");

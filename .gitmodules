@@ -1,0 +1,3 @@
+[submodule "RapidXML"]
+	path = RapidXML
+	url = https://github.com/Fe-Bell/RapidXML.git

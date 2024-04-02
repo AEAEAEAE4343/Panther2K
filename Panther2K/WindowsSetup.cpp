@@ -592,6 +592,7 @@ void WindowsSetup::LoadDrivers()
 {
 	logger->Write(PANTHER_LL_DETAILED, L"Loading drivers for installation...");
 
+	std::vector<WIN32_FIND_DATAW> failedFiles;
 	wchar_t commandBuffer[MAX_PATH + 25];
 	wchar_t pathBuffer[MAX_PATH];
 	GetCurrentDirectoryW(MAX_PATH, pathBuffer);
@@ -627,11 +628,7 @@ void WindowsSetup::LoadDrivers()
 				int ret = _wsystem(commandBuffer);
 				if (ret) 
 				{
-					swprintf_s(buffer, MAX_PATH * 2, L"An error occured while loading driver %s. Panther2K will start, but a device required for installation might not be available.", ffd.cFileName);
-					logger->Write(PANTHER_LL_NORMAL, buffer);
-					MessageBoxPage* msgBox = new MessageBoxPage(buffer, false, currentPage);
-					msgBox->ShowDialog();
-					delete msgBox;
+					failedFiles.push_back(ffd);
 					continue;
 				}
 			}
@@ -642,7 +639,16 @@ void WindowsSetup::LoadDrivers()
 	else
 	{
 		logger->Write(PANTHER_LL_NORMAL, L"Could not enumerate Windows PE drivers. Panther2K will start, but a device required for installation might not be available.");
-		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occured while enumerating available drivers. Panther2K will start, but a device required for installation might not be available.", false, currentPage);
+		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occurred while enumerating available drivers. Panther2K will start, but a device required for installation might not be available.", false, currentPage);
+		msgBox->ShowDialog();
+		delete msgBox;
+	}
+
+	for (auto failedFile : failedFiles) 
+	{
+		swprintf_s(buffer, MAX_PATH * 2, L"An error occurred while loading driver %s. Panther2K will start, but a device required for installation might not be available.", failedFile.cFileName);
+		logger->Write(PANTHER_LL_NORMAL, buffer);
+		MessageBoxPage* msgBox = new MessageBoxPage(buffer, false, currentPage);
 		msgBox->ShowDialog();
 		delete msgBox;
 	}
@@ -690,7 +696,7 @@ void WindowsSetup::InstallDrivers()
 				int ret = _wsystem(commandBuffer);
 				if (ret)
 				{
-					swprintf_s(buffer, MAX_PATH * 2, L"An error occured while installing driver %s (0x%08x). Installation will continue, but a device required for booting might not be available.", ffd.cFileName, ret);
+					swprintf_s(buffer, MAX_PATH * 2, L"An error occurred while installing driver %s (0x%08x). Installation will continue, but a device required for booting might not be available.", ffd.cFileName, ret);
 					logger->Write(PANTHER_LL_NORMAL, buffer);
 					MessageBoxPage* msgBox = new MessageBoxPage(buffer, false, currentPage);
 					msgBox->ShowDialog();
@@ -705,7 +711,7 @@ void WindowsSetup::InstallDrivers()
 	else
 	{
 		logger->Write(PANTHER_LL_NORMAL, L"Could not enumerate Windows installation drivers. Installation will continue, but a device required for booting might not be available.");
-		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occured while enumerating available drivers. Installation will continue, but a device required for booting might not be available.", false, currentPage);
+		MessageBoxPage* msgBox = new MessageBoxPage(L"An error occurred while enumerating available drivers. Installation will continue, but a device required for booting might not be available.", false, currentPage);
 		msgBox->ShowDialog();
 		delete msgBox;
 	}

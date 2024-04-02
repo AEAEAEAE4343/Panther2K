@@ -131,7 +131,7 @@ void PartitionCreationPage::InitPage()
 
 		newUnallocatedSpans[newIndex++] = unallocatedSpans[i];
 	}
-	unallocatedSpanCount = newIndex + 1;
+	unallocatedSpanCount = newIndex;
 	free(unallocatedSpans);
 	unallocatedSpans = newUnallocatedSpans;
 

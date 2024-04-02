@@ -102,10 +102,46 @@ void PartitionCreationPage::InitPage()
 			unallocIndex++;
 		}
 	}
-
 	unallocatedSpanCount = unallocIndex + 1;
 	free(partitionSpans);
-	return;
+
+	// Space between partitions
+	// - Align span to nearest 1 MB boundaries
+	// - Add 1 MB to start and remove 1 MB to end
+	//   (1 MB seems arbitrary, but it is the value Windows uses)
+	// - If start > end remove the space
+	SectorSpan* newUnallocatedSpans = (SectorSpan*)malloc(sizeof(SectorSpan) * (PartitionManager::CurrentDiskPartitionCount + 1));
+	ZeroMemory(newUnallocatedSpans, sizeof(SectorSpan) * (PartitionManager::CurrentDiskPartitionCount + 1));
+	int newIndex = 0;
+	const unsigned long long megabyte = 1024 * 1024 / PartitionManager::CurrentDisk.SectorSize;
+	for (int i = 0; i < unallocatedSpanCount; i++) 
+	{
+		unsigned long long  remainder = unallocatedSpans[i].startSector % (megabyte);
+		if (remainder == 0)
+			unallocatedSpans[i].startSector += megabyte - remainder;
+		unallocatedSpans[i].startSector += megabyte;
+
+		remainder = unallocatedSpans[i].endSector % (megabyte);
+		if (remainder == 0)
+			unallocatedSpans[i].endSector -= remainder;
+		unallocatedSpans[i].endSector -= megabyte;
+
+		if ((long long)(unallocatedSpans[i].endSector - unallocatedSpans[i].startSector + 1) < 0)
+			continue;
+
+		newUnallocatedSpans[newIndex++] = unallocatedSpans[i];
+	}
+	unallocatedSpanCount = newIndex + 1;
+	free(unallocatedSpans);
+	unallocatedSpans = newUnallocatedSpans;
+
+	// If there is no space on the disk (0 unallocated spans), display message box and pop
+	if (unallocatedSpanCount == 0)
+	{
+		PartitionManager::ShowMessagePage(L"Cannot create a new partition because there is no space available on the disk.", MessagePageType::OK, MessagePageUI::Error);
+		PartitionManager::PopPage();
+		return;
+	}
 }
 
 void PartitionCreationPage::DrawPage()
@@ -187,7 +223,7 @@ void PartitionCreationPage::UpdatePage()
 
 		int length = lstrlenW(buffer);
 		// TODO: Make the zero not show up because it is confusing
-		swprintf_s(buffer + length, bufferSize - length, L"%*s%-11.0llu  %-11.0llu  %-9d", consoleSize.cx - 12 - length - 36,
+		swprintf_s(buffer + length, bufferSize - length, L"%*s%-11.0llu  %-11.0llu  %-9.0d", consoleSize.cx - 12 - length - 36,
 			L"", j % 2 ? 0 : unallocatedSpans[j / 2].startSector, j % 2 ? unallocatedSpans[j / 2].endSector : 0,
 			unallocatedSpans[j / 2].GetSize());
 

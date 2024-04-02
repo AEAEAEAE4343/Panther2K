@@ -31,6 +31,7 @@ private:
 	// Size
 	bool enteringSize = false;
 	wchar_t sizeString[20];
+	unsigned long long size;
 
 	int drawY = 0;
 };

@@ -187,7 +187,7 @@ void PartitionCreationPage::UpdatePage()
 
 		int length = lstrlenW(buffer);
 		// TODO: Make the zero not show up because it is confusing
-		swprintf_s(buffer + length, bufferSize - length, L"%*s%-11llu  %-11llu  %-9d", consoleSize.cx - 12 - length - 36,
+		swprintf_s(buffer + length, bufferSize - length, L"%*s%-11.0llu  %-11.0llu  %-9d", consoleSize.cx - 12 - length - 36,
 			L"", j % 2 ? 0 : unallocatedSpans[j / 2].startSector, j % 2 ? unallocatedSpans[j / 2].endSector : 0,
 			unallocatedSpans[j / 2].GetSize());
 
@@ -211,17 +211,30 @@ void PartitionCreationPage::UpdatePage()
 		console->SetForegroundColor(CONSOLE_COLOR_FG);
 	}
 	console->SetPosition(3, drawY + boxHeight + 2);
-	console->Write(L"Final size for partition: ");
+	swprintf_s(buffer, bufferSize, L"Final size for partition: %-25llu", size);
+	console->Write(buffer);
 }
 
 void PartitionCreationPage::RunPage()
 {
 	Console* console = GetConsole();
+	char keyChar = 0;
 
 	while (KEY_EVENT_RECORD* key = console->Read())
 	{
 		switch (key->wVirtualKeyCode)
 		{
+		case VK_NUMPAD0:
+		case VK_NUMPAD1:
+		case VK_NUMPAD2:
+		case VK_NUMPAD3:
+		case VK_NUMPAD4:
+		case VK_NUMPAD5:
+		case VK_NUMPAD6:
+		case VK_NUMPAD7:
+		case VK_NUMPAD8:
+		case VK_NUMPAD9:
+			keyChar = key->wVirtualKeyCode - 0x30;
 		case '0':
 		case '1':
 		case '2':
@@ -232,19 +245,48 @@ void PartitionCreationPage::RunPage()
 		case '7':
 		case '8':
 		case '9':
-		{
-			wchar_t lastChar = sizeString[lstrlenW(sizeString) - 2];
-			if (lastChar < L'0' || lastChar > L'9')
-				break;
-			// TODO: Size input
-			break;
-		}
+		case 'K':
 		case 'M':
 		case 'G':
 		case 'T':
-		case VK_BACK:
-			// TODO: Size input
+		{
+			if (!enteringSize)
+				break;
+			wchar_t lastChar = sizeString[max(lstrlenW(sizeString) - 1, 0)];
+			if (lastChar && (lastChar < L'0' || lastChar > L'9'))
+				break;
+
+			int index = lstrlenW(sizeString);
+			sizeString[index] = keyChar ? keyChar : key->wVirtualKeyCode;
+			sizeString[index + 1] = 0;
+
+			lastChar = sizeString[max(lstrlenW(sizeString) - 1, 0)];
+			size = wcstoull(sizeString, NULL, 10);
+			if (lastChar < L'0' || lastChar > L'9')
+			{
+				const wchar_t* chars = L" KMGT";
+				int index = wcschr(chars, lastChar) - chars;
+				for (int i = 0; i < index; i++)
+					size *= 1024;
+			}
+			size /= PartitionManager::CurrentDisk.SectorSize;
+
+			Update();
 			break;
+		}
+		case VK_BACK:
+		{
+			if (!enteringSize)
+				break;
+			int index = lstrlenW(sizeString);
+			// This flips enteringSize when the string is already empty
+			// because it accesses array element -1 and the memory before
+			// the arrray is the enteringSize variable.
+			// This is fine as this is nice behaviour to have.
+			sizeString[index - 1] = 0;
+			Update();
+			break;
+		}
 		case VK_RETURN:
 			// TODO: Create the partition
 			break;

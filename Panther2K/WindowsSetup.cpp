@@ -729,7 +729,7 @@ int WindowsSetup::RunSetup()
 
 	// Start logger immediately
 	logger = new LibPanther::Logger(L"panther2k.log", PANTHER_LL_VERBOSE);
-	logger->Write(PANTHER_LL_BASIC, L"Starting Panther2K version 1.3...");
+	logger->Write(PANTHER_LL_BASIC, L"Starting Panther2K version " PANTHER_VERSION "...");
 
 	// Initialize GDI+.
 	logger->Write(PANTHER_LL_DETAILED, L"Initializing GDI+...");
@@ -778,7 +778,7 @@ int WindowsSetup::RunSetup()
 	// Start loading the setup
 	Page* loadPage = new Page();
 	LoadPage(loadPage);
-	loadPage->text = L"Panther2K";
+	loadPage->text = L"Panther2K version " PANTHER_VERSION;
 
 	KeyHandler(VK_F7);
 	KeyHandler(VK_NUMPAD0);
@@ -949,7 +949,7 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 		wchar_t displayMessage[MAX_PATH * 2];
 		wchar_t errorMessage[MAX_PATH];
 		FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, NULL, res, NULL, errorMessage, MAX_PATH, NULL);
-		swprintf_s(displayMessage, L"An error occured while preparing the disk. %s", errorMessage);
+		swprintf_s(displayMessage, L"An error occurred while preparing the disk. %s", errorMessage);
 
 		MessageBoxPage* msgBox = new MessageBoxPage(displayMessage, false, currentPage);
 		msgBox->ShowDialog();

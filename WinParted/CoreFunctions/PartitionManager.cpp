@@ -62,6 +62,8 @@ int PartitionManager::RunWinParted(Console* console)
     }
     else
         currentConsole = console;
+	if (logger == NULL)
+		logger = new LibPanther::Logger(L"wparted.log", PANTHER_LL_VERBOSE);
 
 	// Reset values
 	printf("Initializing values...");
@@ -703,6 +705,71 @@ fail:
 	CurrentPage->SetStatusText(oldStatus);
 	CurrentPage->Update();
 	return false;
+}
+
+bool PartitionManager::AddPartition(PartitionInformation* partInfo, unsigned long long flags)
+{
+	int partIndex = -1;
+	for (int i = 1; i <= (CurrentDiskOperatingMode == OperatingMode::MBR ? 4 : 128); i++)
+	{
+		bool taken = false;
+		for (int j = 0; j < CurrentDiskPartitionCount; j++)
+		{
+			if (CurrentDiskPartitions[j].PartitionNumber == i)
+			{
+				taken = true;
+				break;
+			}
+		}
+		if (!taken)
+		{
+			partIndex = i - 1;
+			break;
+		}
+	}
+
+	switch (CurrentDiskOperatingMode)
+	{
+	case OperatingMode::GPT:
+	{
+		GPT_ENTRY* PartitionTableEntry = reinterpret_cast<GPT_ENTRY*>(reinterpret_cast<unsigned char*>(CurrentDiskGPTTable) + (CurrentDiskGPT.TableEntrySize * partIndex));
+		ZeroMemory(PartitionTableEntry, CurrentDiskGPT.TableEntrySize);
+		PartitionTableEntry->StartLBA = partInfo->StartLBA;
+		PartitionTableEntry->EndLBA = partInfo->EndLBA;
+		PartitionTableEntry->TypeGUID = partInfo->Type.TypeGUID;
+		PartitionTableEntry->AttributeFlags = flags;
+		CoCreateGuid(&PartitionTableEntry->UniqueGUID);
+		wcscpy_s(PartitionTableEntry->Name, partInfo->Name);
+
+		break;
+	}
+	case OperatingMode::MBR:
+	{
+		MBR_ENTRY* PartitionTableEntry = (CurrentDiskMBR.PartitionTable + partIndex);
+		ZeroMemory(PartitionTableEntry, sizeof(MBR_ENTRY));
+		PartitionTableEntry->StartLBA = partInfo->StartLBA.UL[1];
+		PartitionTableEntry->SectorCount = partInfo->SectorCount;
+		PartitionTableEntry->BootIndicator = flags;
+		PartitionTableEntry->SystemID = partInfo->Type.SystemID;
+
+		auto MakeCHS = [](unsigned short C, unsigned short H, unsigned short S)
+		{
+			char b1 = static_cast<char>(H);
+			char b2 = static_cast<char>(((C & 0b1100000000) >> 8) + (S & 0b111111));
+			char b3 = static_cast<char>(C * 0b11111111);
+
+			return CHS{ b1, b2, b3 };
+		};
+
+		// Default CHS values
+		// Defined in the EFI spec
+		PartitionTableEntry->StartCHS = MakeCHS(0, 0, 2);
+		PartitionTableEntry->EndCHS = MakeCHS(1023, 254, 63);
+
+		break; 
+	}
+	}
+	return LoadPartitionTable();
 }
 
 bool PartitionManager::DeletePartition(PartitionInformation* partInfo)

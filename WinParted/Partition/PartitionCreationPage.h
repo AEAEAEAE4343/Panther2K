@@ -29,6 +29,7 @@ private:
 	int maxItems;
 
 	// Size
+	void ParseSize();
 	bool enteringSize = false;
 	wchar_t sizeString[20];
 	unsigned long long size;

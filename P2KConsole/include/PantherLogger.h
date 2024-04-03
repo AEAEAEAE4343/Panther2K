@@ -1,4 +1,6 @@
 #pragma once
+
+#include "PantherVersion.h"
 #include <windows.h>
 
 // Shows only basic program flow and errors

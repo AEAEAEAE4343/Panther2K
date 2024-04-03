@@ -1,4 +1,5 @@
 #pragma once
+#include "Version.h"
 #include <windows.h>
 
 // Shows only basic program flow and errors

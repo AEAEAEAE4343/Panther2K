@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Version.h"
 #include <windows.h>
 
 #define VKEY unsigned int

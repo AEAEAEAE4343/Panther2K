@@ -80,14 +80,18 @@ void PartitionInformationPage::DrawPage()
 		if (PartitionManager::CurrentPartition.VolumeLoaded)
 		{
 			console->SetPosition(3, console->GetPosition().y + 1);
-			swprintf(buffer, bufferSize, L"Volume name: %s", PartitionManager::CurrentPartition.VolumeInformation.VolumeName);
-			console->Write(buffer);
+			if (lstrlenW(PartitionManager::CurrentPartition.VolumeInformation.VolumeName))
+			{
+				swprintf(buffer, bufferSize, L"Volume name: %s", PartitionManager::CurrentPartition.VolumeInformation.VolumeName);
+				console->Write(buffer);
+			}
+			else console->Write(L"The volume has no name.");
 
 			console->SetPosition(3, console->GetPosition().y + 1);
 			swprintf(buffer, bufferSize, L"Volume filesystem: %s", PartitionManager::CurrentPartition.VolumeInformation.FileSystem);
 			console->Write(buffer);
 
-			console->SetPosition(3, console->GetPosition().y + 2);
+			console->SetPosition(6, console->GetPosition().y + 2);
 			console->Write(L"\x2022  To change the name of the partition or volume, press N");
 		}
 		else

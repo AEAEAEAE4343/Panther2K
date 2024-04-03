@@ -1,12 +1,13 @@
 #include "Page.h"
 #include "CoreFunctions\PartitionManager.h"
 #include "MessagePage.h"
+#include "PantherVersion.h"
 
 Page::Page()
 {
 	console = 0;
 	statusText = L"WinParted is inspecting your computer's hardware configuration...";
-	text = L"WinParted 1.2.0m12";
+	text = L"WinParted " PANTHER_VERSION " milestone 13";
 	drawHeader = true;
 	drawStatus = true;
 	drawClear = true;

@@ -93,6 +93,7 @@ public:
 
 	static bool LoadPartitionTable();
 	static bool SavePartitionTableToDisk();
+	static bool AddPartition(PartitionInformation* partInfo, unsigned long long flags);
 	static bool DeletePartition(PartitionInformation* partInfo);
 	static HRESULT ApplyPartitionLayoutGPT(WP_PART_LAYOUT* layout);
 	static HRESULT ApplyPartitionLayoutMBR(WP_PART_LAYOUT* layout);

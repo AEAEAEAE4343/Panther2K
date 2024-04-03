@@ -477,6 +477,10 @@ LRESULT CALLBACK CustomConsole::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPAR
 			::SetCursor(LoadCursorW(NULL, NULL));
 			return TRUE;
 		}
+		else 
+		{
+			::SetCursor(LoadCursorW(NULL, IDC_ARROW));
+		}
 		break;
 	case WM_RESIZECONSOLE:
 	{

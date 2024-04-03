@@ -1,4 +1,5 @@
 ﻿#include "PartitionCreationPage.h"
+#include "PartitionTypeSelectionPage.h"
 #include "..\CoreFunctions\PartitionManager.h"
 
 /*
@@ -251,6 +252,21 @@ void PartitionCreationPage::UpdatePage()
 	console->Write(buffer);
 }
 
+void PartitionCreationPage::ParseSize() 
+{
+	wchar_t lastChar = sizeString[max(lstrlenW(sizeString) - 1, 0)];
+	size = wcstoull(sizeString, NULL, 10);
+	if (lastChar < L'0' || lastChar > L'9')
+	{
+		const wchar_t* chars = L" KMGT";
+		int index = wcschr(chars, lastChar) - chars;
+		for (int i = 0; i < index; i++)
+			size *= 1024;
+		size /= PartitionManager::CurrentDisk.SectorSize;
+	}
+	size = min(unallocatedSpans[(selectionIndex + scrollIndex) / 2].GetSize(), size);
+}
+
 void PartitionCreationPage::RunPage()
 {
 	Console* console = GetConsole();
@@ -296,17 +312,7 @@ void PartitionCreationPage::RunPage()
 			sizeString[index] = keyChar ? keyChar : key->wVirtualKeyCode;
 			sizeString[index + 1] = 0;
 
-			lastChar = sizeString[max(lstrlenW(sizeString) - 1, 0)];
-			size = wcstoull(sizeString, NULL, 10);
-			if (lastChar < L'0' || lastChar > L'9')
-			{
-				const wchar_t* chars = L" KMGT";
-				int index = wcschr(chars, lastChar) - chars;
-				for (int i = 0; i < index; i++)
-					size *= 1024;
-			}
-			size /= PartitionManager::CurrentDisk.SectorSize;
-
+			ParseSize();
 			Update();
 			break;
 		}
@@ -317,15 +323,42 @@ void PartitionCreationPage::RunPage()
 			int index = lstrlenW(sizeString);
 			// This flips enteringSize when the string is already empty
 			// because it accesses array element -1 and the memory before
-			// the arrray is the enteringSize variable.
+			// the array is the enteringSize variable.
 			// This is fine as this is nice behaviour to have.
 			sizeString[index - 1] = 0;
+			ParseSize();
 			Update();
 			break;
 		}
 		case VK_RETURN:
-			// TODO: Create the partition
-			break;
+		{
+			int selectedIndex = selectionIndex + scrollIndex;
+			int spanIndex = selectedIndex / 2;
+
+			PartitionInformation newPartition;
+			// before end of span
+			if (selectedIndex % 2)
+			{
+				newPartition.EndLBA.ULL = unallocatedSpans[spanIndex].endSector;
+				newPartition.StartLBA.ULL = unallocatedSpans[spanIndex].endSector - size + 1;
+			}
+			// at start of span
+			else 
+			{
+				newPartition.StartLBA.ULL = unallocatedSpans[spanIndex].startSector;
+				newPartition.EndLBA.ULL = unallocatedSpans[spanIndex].startSector + size - 1;
+			}
+			newPartition.Type.SystemID = PartitionManager::GptTypes[1].gDiskType;
+			newPartition.Type.TypeGUID = PartitionManager::GptTypes[1].guid;
+			wcscpy_s(newPartition.Name, PartitionManager::GptTypes[1].display_name);
+
+			int count = PartitionManager::CurrentDiskPartitionCount;
+			PartitionManager::AddPartition(&newPartition, 0);
+			PartitionManager::LoadPartition(&PartitionManager::CurrentDiskPartitions[count]);
+			PartitionManager::PopPage();
+			PartitionManager::PushPage(new PartitionTypeSelectionPage());
+			return;
+		}
 		case VK_DOWN:
 			if (enteringSize)
 				break;

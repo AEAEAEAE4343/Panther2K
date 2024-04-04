@@ -14,7 +14,7 @@ private:
 	int maxItems;
 
 	bool enteringName = false;
-	wchar_t nameString[20];
+	wchar_t nameString[64];
 
 	wchar_t* supportedFileSystems[5]; /* at most 5 filesystems for now */
 	int supportedFsCount = 0;

@@ -133,9 +133,9 @@ void PartitionFormatPage::UpdatePage()
 	console->SetBackgroundColor(CONSOLE_COLOR_BG);
 	console->SetForegroundColor(CONSOLE_COLOR_FG);
 
-	console->DrawTextLeft(L"Size: ", consoleSize.cx - 6, drawY + boxHeight + 1);
+	console->DrawTextLeft(L"Name: ", consoleSize.cx - 6, drawY + boxHeight + 1);
 	POINT p = console->GetPosition();
-	for (int i = 0; i < 21; i++)
+	for (int i = 0; i <= 63; i++)
 		console->Write(L" ");
 	console->SetPosition(p.x, p.y);
 	console->Write(nameString);
@@ -156,12 +156,16 @@ void PartitionFormatPage::RunPage()
 		if (key->wVirtualKeyCode >= VK_NUMPAD0 && key->wVirtualKeyCode <= VK_NUMPAD9)
 			key->wVirtualKeyCode -= 0x30;
 
-		if (enteringName 
-			&& ((key->wVirtualKeyCode >= '0' && key->wVirtualKeyCode <= '9')
-			|| (key->wVirtualKeyCode >= 'A' && key->wVirtualKeyCode <= 'Z')))
+		bool number = key->wVirtualKeyCode >= '0' && key->wVirtualKeyCode <= '9';
+		bool letter = key->wVirtualKeyCode >= 'A' && key->wVirtualKeyCode <= 'Z';
+
+		if (letter && !(key->dwControlKeyState & SHIFT_PRESSED))
+			key->wVirtualKeyCode += 0x20;
+
+		if (enteringName && (number || letter || key->wVirtualKeyCode == VK_SPACE))
 		{
 			int index = lstrlenW(nameString);
-			if (index == 20)
+			if (index == 63)
 				break;
 			nameString[index] = key->wVirtualKeyCode;
 			nameString[index + 1] = 0;

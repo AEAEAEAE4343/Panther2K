@@ -402,6 +402,8 @@ LRESULT CALLBACK CustomConsole::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPAR
 		SelectObject(hdcBuf, hBuf);
 		EndPaint(hWnd, &ps);
 		break;
+	case WM_SYSKEYDOWN:
+		if (wParam != VK_F10) break;
 	case WM_KEYDOWN:
 		long style;
 		long exStyle;

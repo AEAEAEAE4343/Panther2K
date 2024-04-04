@@ -118,13 +118,13 @@ void PartitionCreationPage::InitPage()
 	for (int i = 0; i < unallocatedSpanCount; i++) 
 	{
 		unsigned long long  remainder = unallocatedSpans[i].startSector % (megabyte);
-		if (remainder == 0)
+		if (remainder != 0)
 			unallocatedSpans[i].startSector += megabyte - remainder;
 		unallocatedSpans[i].startSector += megabyte;
 
 		remainder = unallocatedSpans[i].endSector % (megabyte);
-		if (remainder == 0)
-			unallocatedSpans[i].endSector -= remainder;
+		if (remainder != 0)
+			unallocatedSpans[i].endSector -= remainder + 1;
 		unallocatedSpans[i].endSector -= megabyte;
 
 		if ((long long)(unallocatedSpans[i].endSector - unallocatedSpans[i].startSector + 1) < 0)

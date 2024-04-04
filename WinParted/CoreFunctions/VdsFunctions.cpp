@@ -1,7 +1,7 @@
 #define INITGUID
 #include "PartitionManager.h"
 
-#define Assert(result, action) { if (result != S_OK) { wlogf(PartitionManager::logger, PANTHER_LL_BASIC, 25, L"Failed (0x%08X)", result); action; }};
+#define Assert(result, action) { if (result != S_OK) { wlogf(PartitionManager::GetLogger(), PANTHER_LL_BASIC, 25, L"Failed (0x%08X)", result); action; }};
 
 #define ObjectNameInformation (OBJECT_INFORMATION_CLASS)1
 #define SafeRelease(x) {if (NULL != x) { x->Release(); x = NULL; } }
@@ -10,14 +10,21 @@
 #include <winternl.h>
 #include <vds.h>
 
-HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partition, const wchar_t* fileSystem, const wchar_t* mountPoint)
+HRESULT PerformVdsOperation(PartitionInformation* partition, const wchar_t* fileSystem, const wchar_t* mountPoint, const wchar_t* volumeName, wchar_t** query)
 {
-	if (!fileSystem && !mountPoint)
+	if (!fileSystem && !mountPoint && !query)
 		return ERROR_INVALID_PARAMETER;
 
-	wlogf(PartitionManager::logger, PANTHER_LL_DETAILED, MAX_PATH, L"Starting %s%s%s operation for partition %d on disk %d.", fileSystem ? L"format" : L"", fileSystem && mountPoint ? L" and " : L"", mountPoint ? L"mount" : L"", partition->PartitionNumber, partition->DiskNumber);
-	if (fileSystem) wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, MAX_PATH, L"Target file system: %s.", fileSystem);
-	if (mountPoint) wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, MAX_PATH, L"Target mount point: %s.", mountPoint);
+	if (query && (fileSystem || mountPoint))
+		return ERROR_INVALID_PARAMETER;
+
+	if (volumeName && !fileSystem)
+		return ERROR_INVALID_PARAMETER;
+
+	wlogf(PartitionManager::GetLogger(), PANTHER_LL_DETAILED, MAX_PATH, L"Starting %s%s%s%s operation for partition %d on disk %d.", query ? L"supported filesystems query" : L"", fileSystem ? L"format" : L"", fileSystem && mountPoint ? L" and " : L"", mountPoint ? L"mount" : L"", partition->PartitionNumber, partition->DiskNumber);
+	if (fileSystem) wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, MAX_PATH, L"Target file system: %s.", fileSystem);
+	if (mountPoint) wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, MAX_PATH, L"Target mount point: %s.", mountPoint);
+	if (volumeName) wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, MAX_PATH, L"Target volume name: %s.", volumeName);
 
 	wchar_t requestedDisk[MAX_PATH];
 	swprintf_s(requestedDisk, L"\\\\.\\GLOBALROOT\\Device\\Harddisk%d\\Partition0", partition->DiskNumber);
@@ -31,7 +38,7 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 	Assert(res, return res);
 	wcscpy_s(requestedDisk, ((UNICODE_STRING*)infoBuffer)->Buffer);
 
-	wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, MAX_PATH, L"Target disk path: %s.", requestedDisk);
+	wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, MAX_PATH, L"Target disk path: %s.", requestedDisk);
 
 	HRESULT hResult;
 	HRESULT asyncRes;
@@ -61,15 +68,15 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 	IEnumVdsObject* pEnumVdsPacks = NULL;
 	IEnumVdsObject* pEnumVdsDisks = NULL;
 
-	// Initilize COM and IVdsLoader
-	PartitionManager::logger->Write(PANTHER_LL_VERBOSE, L"Connecting to COM...");
+	// Initialize COM and IVdsLoader
+	PartitionManager::GetLogger()->Write(PANTHER_LL_VERBOSE, L"Connecting to COM...");
 	hResult = CoInitialize(NULL);
 	Assert(hResult, return hResult);
 	hResult = CoCreateInstance(CLSID_VdsLoader, NULL, CLSCTX_LOCAL_SERVER, IID_IVdsServiceLoader, (void**)&pLoader);
 	Assert(hResult, goto releaseCOM);
 
 	// Connect to IVdsService
-	PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Connecting to VDS service...");
+	PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"Connecting to VDS service...");
 	hResult = pLoader->LoadService(NULL, &pService);
 	SafeRelease(pLoader);
 	Assert(hResult, goto releaseCOM);
@@ -77,14 +84,14 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 	Assert(hResult, goto releaseCOM);
 
 	// Refresh VDS data
-	PartitionManager::logger->Write(PANTHER_LL_VERBOSE, L"Refreshing data...");
+	PartitionManager::GetLogger()->Write(PANTHER_LL_VERBOSE, L"Refreshing data...");
 	hResult = pService->Reenumerate();
 	Assert(hResult, goto releaseCOM);
 	hResult = pService->Refresh();
 	Assert(hResult, goto releaseCOM);
 
 	// Query through all software providers
-	PartitionManager::logger->Write(PANTHER_LL_VERBOSE, L"Querying software providers...");
+	PartitionManager::GetLogger()->Write(PANTHER_LL_VERBOSE, L"Querying software providers...");
 	hResult = pService->QueryProviders(VDS_QUERY_SOFTWARE_PROVIDERS, &pEnumVdsSwProviders);
 	Assert(hResult, goto releaseCOM);
 
@@ -93,7 +100,7 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 		hResult = pUnknown->QueryInterface(&pProvider);
 		SafeRelease(pUnknown);
 		Assert(hResult, continue);
-		wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, 50, L"Querying packs for Software Provider #%d...", swpIndex);
+		wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, 50, L"Querying packs for Software Provider #%d...", swpIndex);
 
 		// Query through all packs
 		hResult = pProvider->QueryPacks(&pEnumVdsPacks);
@@ -106,7 +113,7 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 			SafeRelease(pUnknown);
 			Assert(hResult, continue);
 
-			wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, 40, L"  Querying disks for Pack #%d...", packIndex);
+			wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, 40, L"  Querying disks for Pack #%d...", packIndex);
 
 			// Query through all disks
 			hResult = pPack->QueryDisks(&pEnumVdsDisks);
@@ -119,7 +126,7 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 				SafeRelease(pUnknown);
 				Assert(hResult, goto releaseDisk);
 
-				wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, 45, L"    Getting properties for Disk #%d...", diskIndex);
+				wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, 45, L"    Getting properties for Disk #%d...", diskIndex);
 
 				// Determine if the disk contains the target
 				hResult = pDisk->GetProperties(&diskProperties);
@@ -132,13 +139,13 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 				CloseHandle(hFile);
 				Assert(res, goto releaseDisk);
 
-				wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, MAX_PATH, L"    The path of the disk is %s.", ((UNICODE_STRING*)infoBuffer)->Buffer);
+				wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, MAX_PATH, L"    The path of the disk is %s.", ((UNICODE_STRING*)infoBuffer)->Buffer);
 
 				if (lstrcmpW(requestedDisk, ((UNICODE_STRING*)infoBuffer)->Buffer))
 					goto releaseDisk;
 
 				// From this point, no branch should continue iterating over disks
-				PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Found the target disk.");
+				PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"Found the target disk.");
 
 				// Query through extents
 				hResult = pDisk->QueryExtents(&diskExtents, (PLONG)&ulFetchCount);
@@ -147,16 +154,15 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 				for (int i = 0; i < ulFetchCount; i++)
 				{
 					// Test if extent matches the partition offset
-					if (diskExtents[i].ullOffset != partition->StartLBA.ULL * CurrentDisk.SectorSize)
+					if (diskExtents[i].ullOffset != partition->StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize)
 						continue;
 
-
-					PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Found the target partition.");
-					wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, 50, L"         Extent #%d:", i);
-					wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, 50, L"            Type: %d", diskExtents[i].type);
-					wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, 50, L"            Offset: %llu", diskExtents[i].ullOffset);
-					wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, 50, L"            Size: %llu", diskExtents[i].ullSize);
-					wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, MAX_PATH, L"            Volume GUID: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}",
+					PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"Found the target partition.");
+					wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, 50, L"         Extent #%d:", i);
+					wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, 50, L"            Type: %d", diskExtents[i].type);
+					wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, 50, L"            Offset: %llu", diskExtents[i].ullOffset);
+					wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, 50, L"            Size: %llu", diskExtents[i].ullSize);
+					wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, MAX_PATH, L"            Volume GUID: {%08lX-%04hX-%04hX-%02hhX%02hhX-%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX}",
 						diskExtents[i].volumeId.Data1, diskExtents[i].volumeId.Data2, diskExtents[i].volumeId.Data3,
 						diskExtents[i].volumeId.Data4[0], diskExtents[i].volumeId.Data4[1], diskExtents[i].volumeId.Data4[2], diskExtents[i].volumeId.Data4[3],
 						diskExtents[i].volumeId.Data4[4], diskExtents[i].volumeId.Data4[5], diskExtents[i].volumeId.Data4[6], diskExtents[i].volumeId.Data4[7]);
@@ -181,21 +187,46 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 					}
 
 					// Get IVdsVolumeMF2 object
-					PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Found the target volume.");
+					PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"Found the target volume.");
 					hResult = pService->GetObjectW(diskExtents[i].volumeId, VDS_OT_VOLUME, &pUnknown);
 					Assert(hResult, goto releaseCOM);
 					hResult = pUnknown->QueryInterface(&pVolumeMF2);
 					SafeRelease(pUnknown);
 					Assert(hResult, goto releaseCOM);
 
+					// Query supported filesystems 
+					if (query)
+					{
+						VDS_FILE_SYSTEM_FORMAT_SUPPORT_PROP* formatSupport;
+						LONG fsCount;
+						hResult = pVolumeMF2->QueryFileSystemFormatSupport(&formatSupport, &fsCount);
+						Assert(hResult, goto releaseCOM);
+
+						int strLen = 0;
+						for (int i = 0; i < fsCount; i++)
+							strLen += wcslen(formatSupport[i].wszName);
+
+						wchar_t* supportedFilesystemNames = (wchar_t*)malloc(sizeof(wchar_t) * (strLen + fsCount));
+						ZeroMemory(supportedFilesystemNames, sizeof(wchar_t) * (strLen + fsCount));
+						for (int i = 0; i < fsCount; i++)
+						{
+							wcscat_s(supportedFilesystemNames, strLen + fsCount, formatSupport[i].wszName);
+							if (i != fsCount - 1)
+								wcscat_s(supportedFilesystemNames, strLen + fsCount, L"|");
+						}
+						*query = supportedFilesystemNames;
+
+						goto releaseCOM;
+					}
+
 					// Start the formatting
 					if (fileSystem)
 					{
-						PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Formatting the volume...");
+						PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"Formatting the volume...");
 						wchar_t fsNameBuffer[10];
 						wcscpy_s(fsNameBuffer, fileSystem);
-						wchar_t fsLabelBuffer[10];
-						wcscpy_s(fsLabelBuffer, L"");
+						wchar_t fsLabelBuffer[32];
+						wcscpy_s(fsLabelBuffer, volumeName);
 						hResult = pVolumeMF2->FormatEx(fsNameBuffer, 0, 0, fsLabelBuffer, true, true, false, &pAsync);
 
 						Assert(hResult, goto releaseCOM);
@@ -208,7 +239,7 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 					if (!mountPoint) goto releaseCOM;
 
 					// Start mounting
-					PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Mounting the volume...");
+					PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"Mounting the volume...");
 					hResult = pVolumeMF2->QueryInterface(&pVolumeMF);
 					SafeRelease(pVolumeMF2);
 					Assert(hResult, goto releaseCOM);
@@ -216,7 +247,7 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 					// For some reason on MBR disks it takes longer for QueryAccessPaths to become
 					// available after formatting. So we just retry a couple of times.
 
-					PartitionManager::logger->Write(PANTHER_LL_VERBOSE, L"Querying and unmounting existing volume mount points...");
+					PartitionManager::GetLogger()->Write(PANTHER_LL_VERBOSE, L"Querying and unmounting existing volume mount points...");
 					for (int i = 0; i < 10; i++)
 					{
 						hResult = pVolumeMF->QueryAccessPaths(&accessPaths, (PLONG)&ulFetchCount);
@@ -237,7 +268,7 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 					wcscpy_s(mountBuffer, mountPoint);
 					if (lstrlenW(mountBuffer) == 1)
 						wcscat_s(mountBuffer, L":\\");
-					wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, MAX_PATH + 36, L"Mounting the target volume to %s...", mountBuffer);
+					wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, MAX_PATH + 36, L"Mounting the target volume to %s...", mountBuffer);
 					hResult = pVolumeMF->AddAccessPath(mountBuffer);
 					if (hResult == S_FALSE) hResult = S_OK;
 					Assert(hResult, goto releaseCOM);
@@ -251,20 +282,45 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 
 			oemOrESP:
 				// The partition is an OEM or ESP partition
-				PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"The partition is an OEM partition or is the EFI System Partition.");
+				PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"The partition is an OEM partition or is the EFI System Partition.");
 
 				hResult = pDisk->QueryInterface(&pDiskMF);
 				SafeRelease(pDisk);
 				Assert(hResult, goto releaseCOM);
 
+				// Query supported filesystems 
+				if (query)
+				{
+					VDS_FILE_SYSTEM_FORMAT_SUPPORT_PROP* formatSupport;
+					LONG fsCount;
+					hResult = pDiskMF->QueryPartitionFileSystemFormatSupport(partition->StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize , &formatSupport, &fsCount);
+					Assert(hResult, goto releaseCOM);
+
+					int strLen = 0;
+					for (int i = 0; i < fsCount; i++)
+						strLen += wcslen(formatSupport[i].wszName);
+
+					wchar_t* supportedFilesystemNames = (wchar_t*)malloc(sizeof(wchar_t) * (strLen + fsCount));
+					ZeroMemory(supportedFilesystemNames, sizeof(wchar_t) * (strLen + fsCount));
+					for (int i = 0; i < fsCount; i++)
+					{
+						wcscat_s(supportedFilesystemNames, strLen + fsCount, formatSupport[i].wszName);
+						if (i != fsCount - 1)
+							wcscat_s(supportedFilesystemNames, strLen + fsCount, L"|");
+					}
+					*query = supportedFilesystemNames;
+
+					goto releaseCOM;
+				}
+
 				if (fileSystem) 
 				{
-					PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Formatting the partition...");
+					PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"Formatting the partition...");
 					wchar_t fsNameBuffer[10];
 					wcscpy_s(fsNameBuffer, fileSystem);
-					wchar_t fsLabelBuffer[10];
-					wcscpy_s(fsLabelBuffer, L"");
-					pDiskMF->FormatPartitionEx(partition->StartLBA.ULL * CurrentDisk.SectorSize, fsNameBuffer, 0, 0, fsLabelBuffer, true, true, false, &pAsync);
+					wchar_t fsLabelBuffer[32];
+					wcscpy_s(fsLabelBuffer, volumeName);
+					pDiskMF->FormatPartitionEx(partition->StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize, fsNameBuffer, 0, 0, fsLabelBuffer, true, true, false, &pAsync);
 
 					Assert(hResult, goto releaseCOM);
 					asyncRes = pAsync->Wait(&hResult, &asyncOut);
@@ -274,26 +330,26 @@ HRESULT PartitionManager::FormatAndOrMountPartition(PartitionInformation* partit
 				}
 				if (!mountPoint) goto releaseCOM;
 
-				PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"Mounting the partition...");
+				PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"Mounting the partition...");
 				hResult = pDiskMF->QueryInterface(&pAdvDisk);
 				SafeRelease(pDiskMF);
 				Assert(hResult, goto releaseCOM);
 
 				{
 					wchar_t letter = 0;
-					PartitionManager::logger->Write(PANTHER_LL_VERBOSE, L"Querying existing partition drive letter...");
-					hResult = pAdvDisk->GetDriveLetter(partition->StartLBA.ULL * CurrentDisk.SectorSize, &letter);
+					PartitionManager::GetLogger()->Write(PANTHER_LL_VERBOSE, L"Querying existing partition drive letter...");
+					hResult = pAdvDisk->GetDriveLetter(partition->StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize, &letter);
 					Assert(hResult, goto releaseCOM);
 					if (letter != 0)
 					{
-						wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, 47, L"Ummounting partition from drive letter %c:\\...", letter);
-						hResult = pAdvDisk->DeleteDriveLetter(partition->StartLBA.ULL * CurrentDisk.SectorSize, letter);
+						wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, 47, L"Unmounting partition from drive letter %c:\\...", letter);
+						hResult = pAdvDisk->DeleteDriveLetter(partition->StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize, letter);
 					}
-					else PartitionManager::logger->Write(PANTHER_LL_VERBOSE, L"The partition has no existing drive letter.");
+					else PartitionManager::GetLogger()->Write(PANTHER_LL_VERBOSE, L"The partition has no existing drive letter.");
 				}
 
-				wlogf(PartitionManager::logger, PANTHER_LL_VERBOSE, MAX_PATH + 39, L"Mounting the target partition to %s...", mountPoint);
-				hResult = pAdvDisk->AssignDriveLetter(partition->StartLBA.ULL * CurrentDisk.SectorSize, *mountPoint);
+				wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, MAX_PATH + 39, L"Mounting the target partition to %s...", mountPoint);
+				hResult = pAdvDisk->AssignDriveLetter(partition->StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize, *mountPoint);
 				Assert(hResult, goto releaseCOM);
 				mountComplete = true;
 				goto releaseCOM;
@@ -326,23 +382,43 @@ releaseCOM:
 
 	if (fileSystem)
 	{
-		if (formatComplete) PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"The format operation was completed succesfully.");
-		else PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"The format operation has failed.");
+		if (formatComplete) PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"The format operation was completed successfully.");
+		else PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"The format operation has failed.");
 	}
 
 	if (mountPoint)
 	{
-		if (mountComplete) PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"The mount operation was completed succesfully.");
-		else PartitionManager::logger->Write(PANTHER_LL_DETAILED, L"The mount operation has failed.");
+		if (mountComplete) PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"The mount operation was completed successfully.");
+		else PartitionManager::GetLogger()->Write(PANTHER_LL_DETAILED, L"The mount operation has failed.");
 	}
 
 	CoUninitialize();
 
 	if (!formatComplete || mountPoint && !mountComplete)
 	{
-		if (hResult == S_OK) PartitionManager::logger->Write(PANTHER_LL_NORMAL, L"Warning: format/mount operation failed, but result is S_OK!");
+		if (hResult == S_OK) PartitionManager::GetLogger()->Write(PANTHER_LL_NORMAL, L"Warning: format/mount operation failed, but result is S_OK!");
 		return hResult;
 	}
 	else
 		return ERROR_SUCCESS;
+}
+
+HRESULT PartitionManager::FormatPartition(PartitionInformation* partition, const wchar_t* fileSystem, const wchar_t* volumeName)
+{
+	return PerformVdsOperation(partition, fileSystem, NULL, volumeName, NULL);
+}
+
+HRESULT PartitionManager::MountPartition(PartitionInformation* partition, const wchar_t* mountPoint)
+{
+	return PerformVdsOperation(partition, NULL, mountPoint, NULL, NULL);
+}
+
+HRESULT PartitionManager::FormatAndMountPartition(PartitionInformation* partition, const wchar_t* fileSystem, const wchar_t* mountPoint, const wchar_t* volumeName)
+{
+	return PerformVdsOperation(partition, fileSystem, mountPoint, volumeName, NULL);
+}
+
+HRESULT PartitionManager::QueryPartitionSupportedFilesystems(PartitionInformation* partition, wchar_t** query)
+{
+	return PerformVdsOperation(partition, NULL, NULL, NULL, query);
 }

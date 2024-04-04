@@ -39,6 +39,11 @@ void PartitionManager::SetLogger(LibPanther::Logger* logger)
 	PartitionManager::logger = logger;
 }
 
+LibPanther::Logger* PartitionManager::GetLogger()
+{
+	return logger;
+}
+
 int PartitionManager::RunWinParted(Console* console)
 {
     // Prepare the console
@@ -966,7 +971,7 @@ HRESULT PartitionManager::ApplyPartitionLayoutGPT(WP_PART_LAYOUT* layout)
 	{
 		if (lstrcmpW(layout->Partitions[i].FileSystem, L"RAW"))
 		{
-			HRESULT res = FormatAndOrMountPartition(&CurrentDiskPartitions[i], layout->Partitions[i].FileSystem, layout->Partitions[i].MountPoint);
+			HRESULT res = FormatAndMountPartition(&CurrentDiskPartitions[i], layout->Partitions[i].FileSystem, layout->Partitions[i].MountPoint);
 			if (res != S_OK)
 			{
 				result = res;
@@ -1125,7 +1130,7 @@ HRESULT PartitionManager::ApplyPartitionLayoutMBR(WP_PART_LAYOUT* layout)
 	{
 		if (lstrcmpW(layout->Partitions[i].FileSystem, L"RAW"))
 		{
-			HRESULT res = FormatAndOrMountPartition(&CurrentDiskPartitions[i], layout->Partitions[i].FileSystem, layout->Partitions[i].MountPoint);
+			HRESULT res = FormatAndMountPartition(&CurrentDiskPartitions[i], layout->Partitions[i].FileSystem, layout->Partitions[i].MountPoint);
 			if (res != S_OK)
 			{
 				result = res;

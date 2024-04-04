@@ -54,6 +54,9 @@
     <ClCompile Include="CoreFunctions\DllExports.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Partition\PartitionFormatPage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Page.h">
@@ -87,6 +90,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Partition\PartitionCreationPage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Partition\PartitionFormatPage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -72,6 +72,7 @@ public:
 
 	static void SetConsole(Console* console);
 	static void SetLogger(LibPanther::Logger* logger);
+	static LibPanther::Logger* GetLogger();
     static int RunWinParted(Console* console);
 	static void PushPage(Page* page);
 	static void PopPage();
@@ -119,7 +120,16 @@ public:
 	static bool LoadPartition(PartitionInformation* partition);
 	static bool SetCurrentPartitionType(short value);
 	static bool SetCurrentPartitionGuid(GUID value);
-	static HRESULT FormatAndOrMountPartition(PartitionInformation* partition, const wchar_t* fileSystem, const wchar_t* mountPoint);
+
+	//
+	// Vds Functions
+	// 
+
+	static HRESULT FormatPartition(PartitionInformation* partition, const wchar_t* fileSystem, const wchar_t* volumeName = L"");
+	static HRESULT MountPartition(PartitionInformation* partition, const wchar_t* mountPoint);
+	static HRESULT FormatAndMountPartition(PartitionInformation* partition, const wchar_t* fileSystem, const wchar_t* mountPoint, const wchar_t* volumeName = L"");
+	static HRESULT QueryPartitionSupportedFilesystems(PartitionInformation* partition, wchar_t** query);
+	//static HRESULT FormatAndOrMountPartition(PartitionInformation* partition, const wchar_t* fileSystem, const wchar_t* mountPoint, wchar_t** query = 0);
 
 	static PartitionInformation CurrentPartition;
 	

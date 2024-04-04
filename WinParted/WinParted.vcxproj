@@ -168,6 +168,7 @@
     <ClCompile Include="CoreFunctions\DllExports.cpp" />
     <ClCompile Include="CoreFunctions\VdsFunctions.cpp" />
     <ClCompile Include="DiskPartitioningPage.cpp" />
+    <ClCompile Include="Partition\PartitionFormatPage.cpp" />
     <ClCompile Include="Partition\PartitionCreationPage.cpp" />
     <ClCompile Include="Partition\PartitionGuidSelectionPage.cpp" />
     <ClCompile Include="Partition\PartitionInformationPage.cpp" />
@@ -181,6 +182,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DiskPartitioningPage.h" />
+    <ClInclude Include="Partition\PartitionFormatPage.h" />
     <ClInclude Include="Partition\PartitionCreationPage.h" />
     <ClInclude Include="Partition\PartitionGuidSelectionPage.h" />
     <ClInclude Include="Partition\PartitionInformationPage.h" />

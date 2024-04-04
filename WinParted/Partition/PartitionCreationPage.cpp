@@ -171,7 +171,9 @@ void PartitionCreationPage::DrawPage()
 	console->SetPosition(6, console->GetPosition().y + 1);
 	console->Write(L"\x2022  To switch to entering the size, press the TAB key.");
 	console->SetPosition(6, console->GetPosition().y + 1);
-	console->Write(L"\x2022  To create the partition, press the ETNER key.");
+	console->Write(L"\x2022  To create the partition, press the ENTER key.");
+	console->SetPosition(6, console->GetPosition().y + 1);
+	console->Write(L"\x2022  To go back to the partition information screen, press ESC");
 
 	drawY = console->GetPosition().y + 2;
 }
@@ -309,6 +311,8 @@ void PartitionCreationPage::RunPage()
 				break;
 
 			int index = lstrlenW(sizeString);
+			if (index == 20)
+				break;
 			sizeString[index] = keyChar ? keyChar : key->wVirtualKeyCode;
 			sizeString[index + 1] = 0;
 

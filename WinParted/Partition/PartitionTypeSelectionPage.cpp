@@ -53,7 +53,7 @@ void PartitionTypeSelectionPage::DrawPage()
 	console->SetPosition(6, console->GetPosition().y + 1);
 	console->Write(L"\x2022  To save the new type, press ENTER.");
 	console->SetPosition(6, console->GetPosition().y + 1);
-	console->Write(L"\x2022  To go back, press ESC.");
+	console->Write(L"\x2022  To go back to the partition information screen, press ESC");
 
 	console->SetPosition(3, console->GetPosition().y + 2);
 	console->Write(L"Type ID: ");

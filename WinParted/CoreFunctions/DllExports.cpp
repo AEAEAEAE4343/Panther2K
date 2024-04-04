@@ -331,7 +331,7 @@ extern "C" HRESULT _stdcall FormatAndOrMountPartition(Console * console, LibPant
 	HRESULT result = ERROR_BAD_UNIT;
 
 	if (!LoadPartitionFromOffset(diskNumber, partOffset)) goto retFalse;
-	result = PartitionManager::FormatAndOrMountPartition(&PartitionManager::CurrentPartition, fileSystem, mountPoint);
+	result = PartitionManager::FormatAndMountPartition(&PartitionManager::CurrentPartition, fileSystem, mountPoint);
 
 retFalse:
 	PartitionManager::ShowNoInfoDialogs = false;

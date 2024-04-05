@@ -34,6 +34,9 @@ void DiskSelectionPage::Init()
 	HANDLE diskFileHandle;
 	DWORD byteCount;
 	DISK_GEOMETRY dg;
+	STORAGE_PROPERTY_QUERY spq;
+	STORAGE_DEVICE_DESCRIPTOR sdd;
+	PSTORAGE_DEVICE_DESCRIPTOR psdd;
 	wchar_t buffer[256];
 
 	if (diskInfo != NULL)
@@ -81,10 +84,55 @@ void DiskSelectionPage::Init()
 				goto clean;
 			}
 
+			// IOCTL_STORAGE_QUERY_PROPERTY 
+			// Determines the name of the disk
+			// See: https://docs.microsoft.com/en-us/windows/win32/api/winioctl/ne-winioctl-storage_property_id
+			spq.PropertyId = StorageDeviceProperty;
+			spq.QueryType = PropertyStandardQuery;
+			if (!DeviceIoControl(diskFileHandle, IOCTL_STORAGE_QUERY_PROPERTY, &spq, sizeof(spq), &sdd, sizeof(sdd), &byteCount, NULL) && GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+			{
+				diskCount--;
+				goto clean;
+			}
+			psdd = (STORAGE_DEVICE_DESCRIPTOR*)malloc(sdd.Size);
+			if (psdd == NULL || !DeviceIoControl(diskFileHandle, IOCTL_STORAGE_QUERY_PROPERTY, &spq, sizeof(spq), psdd, sdd.Size, &byteCount, NULL))
+			{
+				diskCount--;
+				goto clean;
+			}
+
+			// Concatenate vendor id + product id
+			// Convert the name into a wide string
+			{
+				wchar_t* destPtr = diskInfo[i].name;
+				int sizeOfSrcString = strlen((char*)psdd + psdd->VendorIdOffset);
+				int sizeOfDestString = 260;
+				char* srcPtr = (char*)psdd + psdd->VendorIdOffset;
+				size_t count = _TRUNCATE;
+				size_t bytesWritten;
+
+				if (sizeOfSrcString > 0)
+				{
+					mbstowcs_s(&bytesWritten, destPtr, sizeOfDestString, srcPtr, count);
+					diskInfo[i].name[bytesWritten - 1] = L' ';
+				}
+
+				destPtr = diskInfo[i].name + bytesWritten;
+				sizeOfSrcString = strlen((char*)psdd + psdd->ProductIdOffset);
+				sizeOfDestString = 256 - bytesWritten;
+				srcPtr = (char*)psdd + psdd->ProductIdOffset;
+				mbstowcs_s(&bytesWritten, destPtr, sizeOfDestString, srcPtr, count);
+
+				wchar_t* temp = CleanString(diskInfo[i].name);
+				if (temp)
+				{
+					lstrcpyW(diskInfo[i].name, temp);
+					free(temp);
+				}
+			}
+
 			diskInfo[i].size = dg.Cylinders.QuadPart * dg.TracksPerCylinder * dg.SectorsPerTrack * dg.BytesPerSector;
 			diskInfo[i].mediaType = dg.MediaType;
-			
-			swprintf_s(diskInfo[i].name, L"NAME TO BE IMPLEMENTED");
 
 		clean:
 			CloseHandle(diskFileHandle);

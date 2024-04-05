@@ -179,10 +179,7 @@ void PartitionFormatPage::RunPage()
 			if (!enteringName)
 				break;
 			int index = lstrlenW(nameString);
-			// This flips enteringSize when the string is already empty
-			// because it accesses array element -1 and the memory before
-			// the array is the enteringSize variable.
-			// This is fine as this is nice behaviour to have.
+			if (index == 0) break;
 			nameString[index - 1] = 0;
 			Update();
 			break;

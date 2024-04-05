@@ -192,7 +192,7 @@ void PartitionSelectionPage::Init()
 	memcpy(textBuffer, displayName, length * sizeof(wchar_t));
 	memcpy(textBuffer + length, L" Setup", 14);
 	text = textBuffer;
-	statusText = L"  ENTER=Select  F8=DiskPart  F9=Display all  ESC=Back  F3=Quit";
+	statusText = L"  ENTER=Select  F8=Run WinParted  F9=Display all  ESC=Back  F3=Quit";
 }
 
 void PartitionSelectionPage::Drawer()
@@ -286,6 +286,7 @@ bool PartitionSelectionPage::KeyHandler(WPARAM wParam)
 		break;
 	case VK_F8:
 		WinPartedDll::RunWinParted(console, WindowsSetup::GetLogger());
+		Draw();
 		break;
 	case VK_F9:
 		showAll = !showAll;

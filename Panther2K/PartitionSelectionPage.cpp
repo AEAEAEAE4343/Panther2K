@@ -1,12 +1,8 @@
 #include "PartitionSelectionPage.h"
 #include "WindowsSetup.h"
 #include "QuitingPage.h"
-#include "wdkpartial.h"
 #include "MessageBoxPage.h"
 #include "WinPartedDll.h"
-
-bool libLoaded = false;
-NtQueryVolumeInformationFileFunction NtQueryVolumeInformationFile;
 
 const wchar_t* const part1Strings[] = 
 { 
@@ -30,152 +26,31 @@ PartitionSelectionPage::PartitionSelectionPage(const wchar_t* fileSystem, long l
 	requirements.partitionFree = minimumBytesAvailable;
 	stringTableIndex = stringIndex;
 	dispIndex = displayIndex;
-
-	if (!libLoaded)
-	{
-		HINSTANCE hinstKrnl = LoadLibraryW(L"ntdll.dll");
-		if (hinstKrnl == 0)
-		{
-			//ERROR OUT
-		}
-		NtQueryVolumeInformationFile = (NtQueryVolumeInformationFileFunction) GetProcAddress(hinstKrnl, "NtQueryVolumeInformationFile");
-		if (NtQueryVolumeInformationFile == 0)
-		{
-			//ERROR OUT
-		}
-		libLoaded = true;
-	}
 }
 
 void PartitionSelectionPage::EnumeratePartitions()
 {
-	DWORD bytesCopied;
-	HANDLE volume;
 	BOOL success;
 	wchar_t szNextVolName[MAX_PATH + 1];
-	wchar_t szNextVolNameNoBSlash[MAX_PATH + 1];
-	wchar_t fileSystemName[MAX_PATH + 1];
-	wchar_t diskPath[MAX_PATH + 1];
-	wchar_t fileBuffer[1024];
-
-#ifdef _DEBUG
-	HANDLE hFile = CreateFileW(L"partitions.txt", GENERIC_ALL, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-#else
-	HANDLE hFile = 0;
-#endif
-
+	HANDLE volume;
+	
 	volume = FindFirstVolume(szNextVolName, MAX_PATH);
 	success = (volume != INVALID_HANDLE_VALUE);
 	while (success)
 	{
-		swprintf(fileBuffer, 1024,  L"========================================\n");
-		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-		swprintf(fileBuffer, 1024, L"Volume name: %s\n", szNextVolName);
-		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-
-		HANDLE volumeFileHandle = 0;
-		HANDLE diskFileHandle = 0;
-		VOLUME_INFO vi = { 0 };
-		IO_STATUS_BLOCK iosb = { 0 };
-		FILE_FS_FULL_SIZE_INFORMATION fsi = { 0 };
-		VOLUME_DISK_EXTENTS* vde = (VOLUME_DISK_EXTENTS*)safeMalloc(WindowsSetup::GetLogger(), sizeof(VOLUME_DISK_EXTENTS));
-		DRIVE_LAYOUT_INFORMATION_EX* dli = (DRIVE_LAYOUT_INFORMATION_EX*)safeMalloc(WindowsSetup::GetLogger(), sizeof(DRIVE_LAYOUT_INFORMATION_EX));
-		int partitionCount = 1;
-		bool done = false;
-		
-		lstrcpyW(szNextVolNameNoBSlash, szNextVolName);
-		szNextVolNameNoBSlash[lstrlenW(szNextVolNameNoBSlash) - 1] = L'\0';
-
-		if (!GetVolumePathNamesForVolumeNameW(szNextVolName, vi.mountPoint, MAX_PATH + 1, &bytesCopied))
-			goto cleanup;
-
-		swprintf(fileBuffer, 1024, L"Volume path: %s\n", vi.mountPoint);
-		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-
-		volumeFileHandle = CreateFileW(szNextVolNameNoBSlash, FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
-		if (volumeFileHandle == INVALID_HANDLE_VALUE)
-			goto cleanup;
-		if (NtQueryVolumeInformationFile(volumeFileHandle, &iosb, &fsi, sizeof(FILE_FS_FULL_SIZE_INFORMATION), FileFsFullSizeInformation))
-			goto cleanup; 
-		vi.totalBytes = (long long)fsi.BytesPerSector * (long long)fsi.SectorsPerAllocationUnit * fsi.TotalAllocationUnits.QuadPart;
-		vi.bytesFree = (long long)fsi.BytesPerSector * (long long)fsi.SectorsPerAllocationUnit * fsi.ActualAvailableAllocationUnits.QuadPart;
-		
-		swprintf(fileBuffer, 1024, L"Volume size (MiB): %I64i\n", vi.totalBytes / 1024 / 1024);
-		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-
-		swprintf(fileBuffer, 1024, L"Volume free (MiB): %I64i\n", vi.bytesFree / 1024 / 1024);
-		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-
+		VOLUME_INFO vi;
+		if (!WindowsSetup::GetVolumeInfoFromName(szNextVolName, &vi))
+			goto nextVol;
 		if (!showAll && !WindowsSetup::AllowSmallVolumes && (vi.bytesFree < requirements.partitionFree || vi.totalBytes < requirements.partitionSize))
-			goto cleanup;
+			goto nextVol;
+		if (!showAll && !WindowsSetup::AllowOtherFileSystems && lstrcmpW(vi.fileSystem, requirements.fileSystem) != 0)
+			goto nextVol;
 
-		if (!GetVolumeInformationByHandleW(volumeFileHandle, vi.name, MAX_PATH + 1, NULL, NULL, NULL, fileSystemName, MAX_PATH))
-			goto cleanup;
-
-		swprintf(fileBuffer, 1024, L"Filesystem: %I64i\n", vi.bytesFree / 1024 / 1024);
-		WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-
-		if (!showAll && !WindowsSetup::AllowOtherFileSystems && lstrcmpW(fileSystemName, requirements.fileSystem) != 0)
-			goto cleanup;
-
-		if (!DeviceIoControl(volumeFileHandle, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, vde, sizeof(VOLUME_DISK_EXTENTS), &bytesCopied, NULL))
-			goto cleanup;
-
-		swprintf(diskPath, MAX_PATH, L"\\\\.\\\PHYSICALDRIVE%d", vde->Extents->DiskNumber);
-		diskFileHandle = CreateFileW(diskPath, FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
-		if (diskFileHandle == INVALID_HANDLE_VALUE)
-		{
-			if (GetLastError() == 5)
-			{
-				MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to enumerate partitions: Access denied. Please re-run Panther2K as Administrator. Panther2K will exit.", true, this);
-				msgBox->ShowDialog();
-				delete msgBox;
-				WindowsSetup::RequestExit();
-				return;
-			}
-			else goto cleanup;
-		}
-
-		do
-		{
-			if (!DeviceIoControl(diskFileHandle, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, dli, 48 + (partitionCount * 144), &bytesCopied, NULL))
-			{
-				if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
-					goto cleanup;
-
-				size_t size = offsetof(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry[++partitionCount]);
-				free(dli);
-				dli = (DRIVE_LAYOUT_INFORMATION_EX*)safeMalloc(WindowsSetup::GetLogger(), size);
-			}
-			else done = true;
-		} while (!done);
-
-		for (int i = 0; i < dli->PartitionCount; i++)
-		{
-			if (vde->Extents->StartingOffset.QuadPart >= dli->PartitionEntry[i].StartingOffset.QuadPart &&
-				vde->Extents->StartingOffset.QuadPart < dli->PartitionEntry[i].StartingOffset.QuadPart + dli->PartitionEntry[i].PartitionLength.QuadPart)
-			{
-				vi.diskNumber = vde->Extents->DiskNumber;
-				vi.partitionNumber = dli->PartitionEntry[i].PartitionNumber;
-
-				swprintf(fileBuffer, 1024, L"Disk number: %i\n", vi.diskNumber);
-				WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-				swprintf(fileBuffer, 1024, L"Partition number: %i\n", vi.partitionNumber);
-				WriteFile(hFile, fileBuffer, lstrlenW(fileBuffer) * 2, &bytesCopied, NULL);
-			}
-		}
-
-		free(vde);
-		free(dli);
-		memcpy(vi.fileSystem, fileSystemName, sizeof(wchar_t) * (MAX_PATH + 1));
-		lstrcpyW(vi.guid, szNextVolNameNoBSlash);
 		volumeInfo.push_back(vi);
-	cleanup:
-		CloseHandle(volumeFileHandle);
+	nextVol:
 		success = FindNextVolume(volume, szNextVolName, MAX_PATH) != 0;
 	}
 
-	CloseHandle(hFile);
 	Draw();
 }
 

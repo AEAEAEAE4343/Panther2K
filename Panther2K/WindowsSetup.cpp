@@ -11,6 +11,7 @@
 #include "PartitionSelectionPage.h"
 #include "DiskSelectionPage.h"
 #include "WinPartedDll.h"
+#include "wdkpartial.h"
 
 #include "Gdiplus.h"
 using namespace Gdiplus;
@@ -55,12 +56,9 @@ ImageInfo* WindowsSetup::WimImageInfos = 0;
 int WindowsSetup::WimImageIndex = 0;
 
 bool WindowsSetup::UseLegacy = false;
-const wchar_t* WindowsSetup::Partition1Volume = L"";
-const wchar_t* WindowsSetup::Partition2Volume = L"";
-const wchar_t* WindowsSetup::Partition3Volume = L"";
-const wchar_t* WindowsSetup::Partition1Mount = L"";
-const wchar_t* WindowsSetup::Partition2Mount = L"";
-const wchar_t* WindowsSetup::Partition3Mount = L"";
+VOLUME_INFO WindowsSetup::SystemPartition = { 0 };
+VOLUME_INFO WindowsSetup::BootPartition = { 0 };
+VOLUME_INFO WindowsSetup::RecoveryPartition = { 0 };
 bool WindowsSetup::UseRecovery = true;
 bool WindowsSetup::AllowOtherFileSystems = true;
 bool WindowsSetup::AllowSmallVolumes = true;
@@ -124,7 +122,115 @@ wchar_t WindowsSetup::GetFirstFreeDrive()
 	return L'0';
 }
 
-bool WindowsSetup::LoadPartitionFromMount(const wchar_t* buffer, const wchar_t** destVolume, const wchar_t** destMount)
+NtQueryVolumeInformationFileFunction NtQueryVolumeInformationFile;
+bool WindowsSetup::GetVolumeInfoFromName(const wchar_t* volumeName, PVOLUME_INFO pvi)
+{
+	if (!NtQueryVolumeInformationFile)
+	{
+		HINSTANCE hinstKrnl = LoadLibraryW(L"ntdll.dll");
+		if (hinstKrnl == 0)
+		{
+			//ERROR OUT
+			return false;
+		}
+		NtQueryVolumeInformationFile = (NtQueryVolumeInformationFileFunction)GetProcAddress(hinstKrnl, "NtQueryVolumeInformationFile");
+		if (NtQueryVolumeInformationFile == 0)
+		{
+			//ERROR OUT
+			return false;
+		}
+	}
+
+	bool returnValue = false;
+	DWORD bytesCopied;
+	HANDLE volume;
+
+	wchar_t szNextVolNameNoBSlash[MAX_PATH + 1];
+	wchar_t fileSystemName[MAX_PATH + 1];
+	wchar_t diskPath[MAX_PATH + 1];
+
+	HANDLE volumeFileHandle = 0;
+	HANDLE diskFileHandle = 0;
+	VOLUME_INFO vi = { 0 };
+	IO_STATUS_BLOCK iosb = { 0 };
+	FILE_FS_FULL_SIZE_INFORMATION fsi = { 0 };
+	VOLUME_DISK_EXTENTS* vde = (VOLUME_DISK_EXTENTS*)safeMalloc(WindowsSetup::GetLogger(), sizeof(VOLUME_DISK_EXTENTS));
+	DRIVE_LAYOUT_INFORMATION_EX* dli = (DRIVE_LAYOUT_INFORMATION_EX*)safeMalloc(WindowsSetup::GetLogger(), sizeof(DRIVE_LAYOUT_INFORMATION_EX));
+	int partitionCount = 1;
+	bool done = false;
+
+	lstrcpyW(szNextVolNameNoBSlash, volumeName);
+	szNextVolNameNoBSlash[lstrlenW(szNextVolNameNoBSlash) - 1] = L'\0';
+
+	if (!GetVolumePathNamesForVolumeNameW(volumeName, vi.mountPoint, MAX_PATH + 1, &bytesCopied))
+		goto cleanup;
+
+	volumeFileHandle = CreateFileW(szNextVolNameNoBSlash, FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
+	if (volumeFileHandle == INVALID_HANDLE_VALUE)
+		goto cleanup;
+	if (NtQueryVolumeInformationFile(volumeFileHandle, &iosb, &fsi, sizeof(FILE_FS_FULL_SIZE_INFORMATION), FileFsFullSizeInformation))
+		goto cleanup;
+	vi.totalBytes = (long long)fsi.BytesPerSector * (long long)fsi.SectorsPerAllocationUnit * fsi.TotalAllocationUnits.QuadPart;
+	vi.bytesFree = (long long)fsi.BytesPerSector * (long long)fsi.SectorsPerAllocationUnit * fsi.ActualAvailableAllocationUnits.QuadPart;
+
+	if (!GetVolumeInformationByHandleW(volumeFileHandle, vi.name, MAX_PATH + 1, NULL, NULL, NULL, fileSystemName, MAX_PATH))
+		goto cleanup;
+
+	if (!DeviceIoControl(volumeFileHandle, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, vde, sizeof(VOLUME_DISK_EXTENTS), &bytesCopied, NULL))
+		goto cleanup;
+
+	swprintf(diskPath, MAX_PATH, L"\\\\.\\\PHYSICALDRIVE%d", vde->Extents->DiskNumber);
+	diskFileHandle = CreateFileW(diskPath, FILE_READ_DATA | FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
+	if (diskFileHandle == INVALID_HANDLE_VALUE)
+	{
+		if (GetLastError() == 5)
+		{
+			MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to get partition info: Access denied. Please re-run Panther2K as Administrator. Panther2K will exit.", true, currentPage);
+			msgBox->ShowDialog();
+			delete msgBox;
+			RequestExit();
+			return false;
+		}
+		else goto cleanup;
+	}
+
+	do
+	{
+		if (!DeviceIoControl(diskFileHandle, IOCTL_DISK_GET_DRIVE_LAYOUT_EX, NULL, 0, dli, 48 + (partitionCount * 144), &bytesCopied, NULL))
+		{
+			if (GetLastError() != ERROR_INSUFFICIENT_BUFFER)
+				goto cleanup;
+
+			size_t size = offsetof(DRIVE_LAYOUT_INFORMATION_EX, PartitionEntry[++partitionCount]);
+			free(dli);
+			dli = (DRIVE_LAYOUT_INFORMATION_EX*)safeMalloc(GetLogger(), size);
+		}
+		else done = true;
+	} while (!done);
+
+	for (int i = 0; i < dli->PartitionCount; i++)
+	{
+		if (vde->Extents->StartingOffset.QuadPart >= dli->PartitionEntry[i].StartingOffset.QuadPart &&
+			vde->Extents->StartingOffset.QuadPart < dli->PartitionEntry[i].StartingOffset.QuadPart + dli->PartitionEntry[i].PartitionLength.QuadPart)
+		{
+			vi.diskNumber = vde->Extents->DiskNumber;
+			vi.partitionNumber = dli->PartitionEntry[i].PartitionNumber;
+			vi.partOffset = vde->Extents->StartingOffset.QuadPart;
+		}
+	}
+
+	free(vde);
+	free(dli);
+	memcpy(vi.fileSystem, fileSystemName, sizeof(wchar_t) * (MAX_PATH + 1));
+	lstrcpyW(vi.guid, szNextVolNameNoBSlash);
+	memcpy(pvi, &vi, sizeof(VOLUME_INFO));
+	returnValue = true;
+cleanup:
+	if (volumeFileHandle) CloseHandle(volumeFileHandle);
+	return returnValue;
+}
+
+/*bool WindowsSetup::LoadPartitionFromMount(const wchar_t* buffer, const wchar_t** destVolume, const wchar_t** destMount)
 {
 	int c = lstrlenW(buffer);
 	wchar_t* partition = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * c);
@@ -214,7 +320,7 @@ bool WindowsSetup::LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootP
 	}
 
 	(const_cast<wchar_t*>(*destVolume))[lstrlenW(*destVolume) - 1] = '\x0';
-}
+}*/
 
 bool FileExists(const wchar_t* szPath)
 {
@@ -291,18 +397,14 @@ bool WindowsSetup::LoadConfig()
 	GetPrivateProfileStringW(L"Generic", L"CanGoBack", L"Yes", iniBuffer, 4, INIFile);
 	CanGoBack = lstreqW(iniBuffer, L"Yes");
 
-	// Phase 1
-	GetPrivateProfileStringW(L"Phase1", L"SkipWelcome", L"No", iniBuffer, 4, INIFile);
-	SkipPhase1 = lstreqW(iniBuffer, L"Yes");
-
-	// Phase 2
-	GetPrivateProfileStringW(L"Phase2", L"WimFile", L"Auto", iniBuffer, MAX_PATH, INIFile);
+	// Sources
+	GetPrivateProfileStringW(L"Sources", L"WimFile", L"Auto", iniBuffer, MAX_PATH, INIFile);
 	
 	if (lstreqW(iniBuffer, L"Auto"))
 	{
 		if (!LocateWimFile(iniBuffer))
 		{
-			logger->Write(PANTHER_LL_BASIC, L"[Phase2\\WimFile] The WIM file could not be found automatically.");
+			logger->Write(PANTHER_LL_BASIC, L"[Sources\\WimFile] The WIM file could not be found automatically.");
 			msgBox = new MessageBoxPage(L"The WIM file could not be found automatically. Please specify the location of the WIM file to use in the config. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
 			delete msgBox;
@@ -314,7 +416,7 @@ bool WindowsSetup::LoadConfig()
 		WimFile = wimPath;
 		if (!LoadWimFile())
 		{
-			wsprintfW(logBuffer, L"[Phase2\\WimFile] The WIM file '%s' could not be loaded.", WimFile);
+			wsprintfW(logBuffer, L"[Sources\\WimFile] The WIM file '%s' could not be loaded.", WimFile);
 			logger->Write(PANTHER_LL_BASIC, logBuffer);
 			msgBox = new MessageBoxPage(L"The WIM file could not be loaded. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
@@ -322,63 +424,54 @@ bool WindowsSetup::LoadConfig()
 			return false;
 		}
 	}
-	else if (!lstreqW(iniBuffer, L"Ask"))
+
+	wchar_t* wimPath;
+	if (iniBuffer[0] == L'\\')
+		wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(iniBuffer) + lstrlenW(rootFilePath)));
+	else
+		wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
+	if (iniBuffer[0] == L'\\')
 	{
-		SkipPhase2Wim = true;
-		wchar_t* wimPath;
-		if (iniBuffer[0] == L'\\')
-			wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(iniBuffer) + lstrlenW(rootFilePath)));
-		else
-			wimPath = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
-		if (iniBuffer[0] == L'\\')
+		memcpy(wimPath, rootFilePath, sizeof(wchar_t) * (lstrlenW(rootFilePath)));
+		memcpy(wimPath + lstrlenW(rootFilePath) - 1, iniBuffer, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
+	}
+	else
+		memcpy(wimPath, iniBuffer, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
+
+	WimFile = wimPath;
+	if (!LoadWimFile())
+	{
+		wsprintfW(logBuffer, L"[Sources\\WimFile] The WIM file '%s' could not be loaded.", WimFile);
+		logger->Write(PANTHER_LL_BASIC, logBuffer);
+		msgBox = new MessageBoxPage(L"The WIM file specified in the config could not be loaded. Panther2K will exit.", true, currentPage);
+		msgBox->ShowDialog();
+		delete msgBox;
+		return false;
+	}
+
+	// WelcomePhase
+	GetPrivateProfileStringW(L"WelcomePhase", L"SkipWelcome", L"No", iniBuffer, 4, INIFile);
+	SkipPhase1 = lstreqW(iniBuffer, L"Yes");
+
+	// ImageSelectionPhase
+	int index = GetPrivateProfileIntW(L"ImageSelectionPhase", L"WimImageIndex", -1, INIFile);
+	if (index != -1)
+	{
+		WimImageIndex = index;
+		HANDLE hImage = WIMLoadImage(WimHandle, WimImageIndex);
+		if (!hImage)
 		{
-			memcpy(wimPath, rootFilePath, sizeof(wchar_t) * (lstrlenW(rootFilePath)));
-			memcpy(wimPath + lstrlenW(rootFilePath) - 1, iniBuffer, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
-		}
-		else
-			memcpy(wimPath, iniBuffer, sizeof(wchar_t) * (lstrlenW(iniBuffer) + 1));
-		WimFile = wimPath;
-		if (!LoadWimFile())
-		{
-			wsprintfW(logBuffer, L"[Phase2\\WimFile] The WIM file '%s' could not be loaded.", WimFile);
+			wsprintfW(logBuffer, L"[ImageSelectionPhase\\WimImageIndex] Failed to load the image index specified in the config (%d)", WimImageIndex);
 			logger->Write(PANTHER_LL_BASIC, logBuffer);
-			msgBox = new MessageBoxPage(L"The WIM file specified in the config could not be loaded. Panther2K will exit.", true, currentPage);
+			msgBox = new MessageBoxPage(L"Failed to load the image index specified in the config. Panther2K will exit.", true, currentPage);
 			msgBox->ShowDialog();
 			delete msgBox;
 			return false;
 		}
 	}
-	else
-	{
-		wsprintfW(logBuffer, L"[Phase2\\WimFile] The configuration option 'Ask' has not yet been implemented yet.");
-		logger->Write(PANTHER_LL_BASIC, logBuffer);
-		msgBox = new MessageBoxPage(L"The specified configuration option has not been implemented yet (WimFile=Ask). Panther2K will exit.", true, currentPage);
-		msgBox->ShowDialog();
-		delete msgBox;
-		return false;
-	}
-	if (SkipPhase2Wim)
-	{
-		int index = GetPrivateProfileIntW(L"Phase2", L"WimImageIndex", -1, INIFile);
-		if (index != -1)
-		{
-			SkipPhase2Image = true;
-			WimImageIndex = index;
-			HANDLE hImage = WIMLoadImage(WimHandle, WimImageIndex);
-			if (!hImage)
-			{
-				wsprintfW(logBuffer, L"[Phase2\\WimImageIndex] Failed to load the image index specified in the config (%d)", WimImageIndex);
-				logger->Write(PANTHER_LL_BASIC, logBuffer);
-				msgBox = new MessageBoxPage(L"Failed to load the image index specified in the config. Panther2K will exit.", true, currentPage);
-				msgBox->ShowDialog();
-				delete msgBox;
-				return false;
-			}
-		}
-	}
 
-	// Phase 3
-	GetPrivateProfileStringW(L"Phase3", L"BootMethod", L"Ask", iniBuffer, MAX_PATH, INIFile);
+	// BootSelectionPhase
+	GetPrivateProfileStringW(L"BootSelectionPhase", L"BootMethod", L"Ask", iniBuffer, MAX_PATH, INIFile);
 	if (!lstreqW(iniBuffer, L"Ask"))
 	{
 		SkipPhase3 = true;
@@ -397,96 +490,26 @@ bool WindowsSetup::LoadConfig()
 		}
 	}
 
-	// Phase 4
-	GetPrivateProfileStringW(L"Phase4", L"UseRecovery", L"Yes", iniBuffer, MAX_PATH, INIFile);
+	GetPrivateProfileStringW(L"BootSelectionPhase", L"UseRecovery", L"Yes", iniBuffer, MAX_PATH, INIFile);
 	UseRecovery = lstreqW(iniBuffer, L"Yes");
-	if (SkipPhase3)
-	{
-		GetPrivateProfileStringW(L"Phase4", L"Partition1", L"Ask", iniBuffer, MAX_PATH, INIFile);
-		if (!lstreqW(iniBuffer, L"Ask"))
-		{
-			SkipPhase4_1 = true;
-			switch (iniBuffer[0])
-			{
-			case L'N':
-				msgBox = new MessageBoxPage(L"Panther2K does not support Disk and Partition number yet. Panther2K will exit.", true, currentPage);
-				msgBox->ShowDialog();
-				delete msgBox;
-				return false;
-			case L'V':
-				if (!LoadPartitionFromVolume(iniBuffer, rootCwdPath, L"$Panther2K\\Sys\\", &Partition1Volume, &Partition1Mount))
-					return false;
-				break;
-			case L'M':
-				if (!LoadPartitionFromMount(iniBuffer, &Partition1Volume, &Partition1Mount))
-					return false;
-				break;
-			}
-		}
 
-		GetPrivateProfileStringW(L"Phase4", L"Partition3", L"Ask", iniBuffer, MAX_PATH, INIFile);
-		if (!lstreqW(iniBuffer, L"Ask"))
-		{
-			SkipPhase4_3 = true;
-			switch (iniBuffer[0])
-			{
-			case L'N':
-				msgBox = new MessageBoxPage(L"Panther2K does not support Disk and Partition number yet. Panther2K will exit.", true, currentPage);
-				msgBox->ShowDialog();
-				delete msgBox;
-				return false;
-			case L'V':
-				if (!LoadPartitionFromVolume(iniBuffer, rootCwdPath, L"$Panther2K\\Win\\", &Partition3Volume, &Partition3Mount))
-					return false;
-				break;
-			case L'M':
-				if (!LoadPartitionFromMount(iniBuffer, &Partition3Volume, &Partition3Mount))
-					return false;
-				break;
-			}
-		}
-
-		if (!UseLegacy && UseRecovery)
-		{
-			GetPrivateProfileStringW(L"Phase4", L"Partition2", L"Ask", iniBuffer, MAX_PATH, INIFile);
-			if (!lstreqW(iniBuffer, L"Ask"))
-			{
-				SkipPhase4_2 = true;
-				switch (iniBuffer[0])
-				{
-				case L'N':
-					msgBox = new MessageBoxPage(L"Panther2K does not support Disk and Partition number yet. Panther2K will exit.", true, currentPage);
-					msgBox->ShowDialog();
-					delete msgBox;
-					return false;
-				case L'V':
-					if (!LoadPartitionFromVolume(iniBuffer, rootCwdPath, L"$Panther2K\\Rec\\", &Partition2Volume, &Partition2Mount))
-						return false;
-					break;
-				case L'M':
-					if (!LoadPartitionFromMount(iniBuffer, &Partition2Volume, &Partition2Mount))
-						return false;
-					break;
-				}
-			}
-		}
-	}
-	GetPrivateProfileStringW(L"Phase4", L"AllowOtherFileSystems", L"No", iniBuffer, 4, INIFile);
+	// TargetSelectionPhase
+	GetPrivateProfileStringW(L"TargetSelectionPhase", L"AllowOtherFileSystems", L"No", iniBuffer, 4, INIFile);
 	AllowOtherFileSystems = lstreqW(iniBuffer, L"Yes");
 
-	GetPrivateProfileStringW(L"Phase4", L"AllowSmallVolumes", L"No", iniBuffer, 4, INIFile);
+	GetPrivateProfileStringW(L"TargetSelectionPhase", L"AllowSmallVolumes", L"No", iniBuffer, 4, INIFile);
 	AllowSmallVolumes = lstreqW(iniBuffer, L"Yes");
 	
-	// Phase 5
-	GetPrivateProfileStringW(L"Phase5", L"ShowFileNames", L"Yes", iniBuffer, 4, INIFile);
+	// InstallationPhase
+	GetPrivateProfileStringW(L"InstallationPhase", L"ShowFileNames", L"Yes", iniBuffer, 4, INIFile);
 	ShowFileNames = lstreqW(iniBuffer, L"Yes");
 
-	// Phase 6
-	GetPrivateProfileStringW(L"Phase6", L"ContinueWithoutRecovery", L"Yes", iniBuffer, 4, INIFile);
+	// BootPreparationPhase
+	GetPrivateProfileStringW(L"BootPreparationPhase", L"ContinueWithoutRecovery", L"Yes", iniBuffer, 4, INIFile);
 	ContinueWithoutRecovery = lstreqW(iniBuffer, L"Yes");
 
-	// Phase 7
-	RebootTimer = GetPrivateProfileIntW(L"Phase7", L"RebootTimer", 10000, INIFile);
+	// EndPhase
+	RebootTimer = GetPrivateProfileIntW(L"EndPhase", L"RebootTimer", 10000, INIFile);
 
 	// Console
 	GetPrivateProfileStringW(L"Console", L"ColorScheme", L"Windows Setup", iniBuffer, MAX_PATH, INIFile);
@@ -691,7 +714,7 @@ void WindowsSetup::InstallDrivers()
 				swprintf_s(buffer, MAX_PATH * 2, L"Installing driver %s...", ffd.cFileName);
 				logger->Write(PANTHER_LL_DETAILED, buffer);
 
-				swprintf_s(commandBuffer, MAX_PATH + 25, L"dism /image:\"%s\\\" /add-driver /driver:\".\\drivers\\%s\"", Partition3Mount, ffd.cFileName);
+				swprintf_s(commandBuffer, MAX_PATH + 25, L"dism /image:\"%s\\\" /add-driver /driver:\".\\drivers\\%s\"", SystemPartition.mountPoint, ffd.cFileName);
 				logger->Write(PANTHER_LL_NORMAL, commandBuffer);
 				int ret = _wsystem(commandBuffer);
 				if (ret)
@@ -961,28 +984,19 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 	else 
 	{
 		// System
-		if (lstrlenW(mountPoints[0]) == 1)
-		{
-			wcscat_s(mountPoints[0], MAX_PATH, L":\\");
-		}
-		Partition1Mount = mountPoints[0];
-		Partition1Volume = volumeList[0];
+		ZeroMemory(&BootPartition, sizeof(VOLUME_INFO));
+		if (!GetVolumeInfoFromName(volumeList[0], &BootPartition))
+			return false;
 
 		// Recovery
-		if (lstrlenW(mountPoints[2]) == 1)
-		{
-			wcscat_s(mountPoints[2], MAX_PATH, L":\\");
-		}
-	    Partition2Mount = mountPoints[2];
-		Partition2Volume = volumeList[2];
+		ZeroMemory(&RecoveryPartition, sizeof(VOLUME_INFO));
+		if (!GetVolumeInfoFromName(volumeList[2], &RecoveryPartition))
+			return false;
 
 		// Windows
-		if (lstrlenW(mountPoints[1]) == 1)
-		{
-			wcscat_s(mountPoints[1], MAX_PATH, L":\\");
-		}
-		Partition3Mount = mountPoints[1];
-		Partition3Volume = volumeList[1];
+		ZeroMemory(&SystemPartition, sizeof(VOLUME_INFO));
+		if (!GetVolumeInfoFromName(volumeList[1], &SystemPartition))
+			return false;
 
 		currentPage->Draw();
 		return true;
@@ -991,48 +1005,21 @@ bool WindowsSetup::SelectPartitionsWithDisk(int diskNumber)
 
 void WindowsSetup::SelectPartition(int stringIndex, VOLUME_INFO volume)
 {
-	wchar_t buffer[MAX_PATH + 1];
-	wchar_t rootPath[MAX_PATH + 1];
-
-	_wgetcwd(rootPath, MAX_PATH);
-	PathStripToRootW(rootPath);
-
-	const wchar_t** targetVolume;
-	const wchar_t** targetMount;
-	const wchar_t* mount;
-	switch (stringIndex)
+	switch (stringIndex) 
 	{
 	case 0:
-		targetVolume = &Partition3Volume;
-		targetMount = &Partition3Mount;
-		mount = L"$Panther2K\\Win\\";
+		SystemPartition = volume;
 		break;
 	case 1:
 	case 2:
-		targetVolume = &Partition1Volume;
-		targetMount = &Partition1Mount;
-		mount = L"$Panther2K\\Sys\\";
+		BootPartition = volume;
 		break;
 	case 3:
-		targetVolume = &Partition2Volume;
-		targetMount = &Partition2Mount;
-		mount = L"$Panther2K\\Rec\\";
+		RecoveryPartition = volume;
 		break;
 	default:
 		return;
 	}
-	(*targetVolume) = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (MAX_PATH + 1));
-	(*targetMount) = (wchar_t*)safeMalloc(logger, sizeof(wchar_t) * (MAX_PATH + 1));
-
-	lstrcpyW((LPWSTR)*targetVolume, volume.guid);
-	if (lstrcmpW(volume.mountPoint, L"") == 0)
-	{
-		buffer[0] = L'V';
-		lstrcpyW(buffer + 1, volume.guid);
-		LoadPartitionFromVolume(buffer, rootPath, mount, targetVolume, targetMount);
-	}
-	else
-		lstrcpyW((LPWSTR)*targetMount, volume.mountPoint);
 }
 
 void WindowsSetup::SelectNextPartition(int index)

@@ -16,12 +16,25 @@ struct ImageInfo
 	unsigned long long TotalSize;
 };
 
-typedef struct VOLUME_INFO;
+typedef struct VOLUME_INFO
+{
+	wchar_t mountPoint[MAX_PATH + 1];
+	wchar_t fileSystem[MAX_PATH + 1];
+	wchar_t name[MAX_PATH + 1];
+	wchar_t guid[MAX_PATH + 1];
+	long long totalBytes;
+	long long bytesFree;
+	int diskNumber;
+	int partitionNumber;
+	long long partOffset;
+} *PVOLUME_INFO;
 
 static class WindowsSetup
 {
 public:
+	// Miscellaneous functions
 	static wchar_t GetFirstFreeDrive();
+	static bool GetVolumeInfoFromName(const wchar_t* volumeName, PVOLUME_INFO pvi);
 	static bool LoadConfig();
 
 	// Program loop
@@ -96,12 +109,15 @@ public:
 	static bool UseLegacy;
 
 	// Phase 4
-	static const wchar_t* Partition1Volume;
+	static VOLUME_INFO SystemPartition;
+	static VOLUME_INFO BootPartition;
+	static VOLUME_INFO RecoveryPartition;
+	/*static const wchar_t* Partition1Volume;
 	static const wchar_t* Partition2Volume;
 	static const wchar_t* Partition3Volume; 
 	static const wchar_t* Partition1Mount;
 	static const wchar_t* Partition2Mount;
-	static const wchar_t* Partition3Mount;
+	static const wchar_t* Partition3Mount;*/
 	static bool UseRecovery;
 	static bool AllowOtherFileSystems;
 	static bool AllowSmallVolumes;
@@ -116,8 +132,8 @@ public:
 	// Phase 7
 	static int RebootTimer;
 private:
-	static bool LoadPartitionFromMount(const wchar_t* buffer, const wchar_t** destVolume, const wchar_t** destMount);
-	static bool LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootPath, const wchar_t* mountPath, const wchar_t** destVolume, const wchar_t** destMount);
+	//static bool LoadPartitionFromMount(const wchar_t* buffer, const wchar_t** destVolume, const wchar_t** destMount);
+	//static bool LoadPartitionFromVolume(wchar_t* buffer, const wchar_t* rootPath, const wchar_t* mountPath, const wchar_t** destVolume, const wchar_t** destMount);
 	static bool LocateWimFile(wchar_t* buffer);
 
 	static LibPanther::Logger* logger;

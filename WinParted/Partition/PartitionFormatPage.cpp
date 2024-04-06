@@ -202,6 +202,7 @@ void PartitionFormatPage::RunPage()
 				swprintf_s(buffer, L"Could not format the partition: 0x%08X", hR);
 				PartitionManager::ShowMessagePage(buffer, MessagePageType::OK, MessagePageUI::Error);
 			}
+			PartitionManager::LoadPartition(&PartitionManager::CurrentPartition);
 			PartitionManager::PopPage();
 			return;
 		}

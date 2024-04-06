@@ -21,13 +21,13 @@ void WriteToFile(const wchar_t* string)
 	if (!installLog)
 	{
 		wchar_t buffer[MAX_PATH];
-		swprintf_s(buffer, L"%s%s", WindowsSetup::Partition3Mount, L"panther2k.log");
+		swprintf_s(buffer, L"%s%s", WindowsSetup::SystemPartition.mountPoint, L"panther2k.log");
 		installLog = new LibPanther::Logger(buffer, PANTHER_LL_VERBOSE);
 
 		WriteToFile(L"Starting Panther2K installation log...");
 		swprintf_s(buffer, L"   Installing %s to %s.", 
 			WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].DisplayName,
-			WindowsSetup::Partition3Volume);
+			WindowsSetup::SystemPartition.name);
 		WriteToFile(buffer);
 		swprintf_s(buffer, L"   Total installation size: %llu bytes", WindowsSetup::WimImageInfos[WindowsSetup::WimImageIndex - 1].TotalSize);
 	}
@@ -110,7 +110,7 @@ void __stdcall WimApplyThread(PDWORD dwThreadId)
 {
 	WIMRegisterMessageCallback(WindowsSetup::WimHandle, (FARPROC)MessageCallback, dwThreadId);
 	HANDLE him = WIMLoadImage(WindowsSetup::WimHandle, WindowsSetup::WimImageIndex);
-	BOOL result = WIMApplyImage(him, WindowsSetup::Partition3Mount, WIM_FLAG_INDEX);
+	BOOL result = WIMApplyImage(him, WindowsSetup::SystemPartition.mountPoint, WIM_FLAG_INDEX);
 	hResult = GetLastError();
 	WIMUnregisterMessageCallback(WindowsSetup::WimHandle, (FARPROC)MessageCallback);
 	runMessageLoop = false;

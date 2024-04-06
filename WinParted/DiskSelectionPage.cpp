@@ -36,6 +36,9 @@ void DiskSelectionPage::DrawPage()
 	console->Write(L"\x2022  To start partitioning the selected disk, press ENTER");
 
 	console->SetPosition(6, console->GetPosition().y + 2);
+	console->Write(L"\x2022  To refresh the list of disks, press F5");
+
+	console->SetPosition(6, console->GetPosition().y + 2);
 	console->Write(L"\x2022  To quit WinParted (and return to Panther2K) press F3");
 
 	console->SetPosition(3, console->GetPosition().y + 2);
@@ -119,6 +122,10 @@ void DiskSelectionPage::RunPage()
 			else if (selectionIndex + scrollIndex - 1 >= 0)
 				scrollIndex--;
 			Update();
+			break;
+		case VK_F5:
+			PartitionManager::PopulateDiskInformation();
+			Draw();
 			break;
 		case VK_RETURN:
 			if (PartitionManager::LoadDisk(PartitionManager::DiskInformationTable + (scrollIndex + selectionIndex), false))

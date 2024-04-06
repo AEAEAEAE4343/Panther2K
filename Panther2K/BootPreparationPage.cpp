@@ -114,171 +114,6 @@ BootPreparationPage::~BootPreparationPage()
 	free((wchar_t*)text);
 }
 
-void BootPreparationPage::PrepareBootFiles()
-{
-	wchar_t buffer1[MAX_PATH];
-	wchar_t buffer2[MAX_PATH];
-	wchar_t errorMessage[MAX_PATH];
-	wchar_t systemDirectory[MAX_PATH];
-	DWORD retval = 0;
-	PVOID wow64State = 0;
-	SHELLEXECUTEINFOW ShExecInfo = { 0 };
-	ShExecInfo.cbSize = sizeof(SHELLEXECUTEINFOW);
-	ShExecInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
-	ShExecInfo.hwnd = NULL;
-	ShExecInfo.lpVerb = L"open";
-	ShExecInfo.lpFile = L"";
-	ShExecInfo.lpParameters = L"";
-	ShExecInfo.lpDirectory = /*systemDirectory;*/ NULL;
-	ShExecInfo.nShow = SW_HIDE;
-	ShExecInfo.hInstApp = NULL;
-
-	/*
-	 * For this phase of the installation, Panther2K cannot use filesystem redirections for 32-bit systems.
-	 * This is because Panther2K needs access to bcdboot and reagentc, which are not present in SysWOW64.
-	 */
-	Wow64DisableWow64FsRedirection(&wow64State);
-
-	GetSystemDirectoryW(systemDirectory, MAX_PATH);
-	int strLen = lstrlenW(systemDirectory);
-	systemDirectory[strLen] = L'\\';
-	systemDirectory[strLen + 1] = L'\0';
-
-	if (WindowsSetup::UseLegacy)
-	{
-		statusText = L"  Panther2K is creating the Boot Configuration Data...";
-		Draw();
-		DoEvents();
-		swprintf(buffer1, MAX_PATH, L"bcdboot %sWindows /s %s /f BIOS", WindowsSetup::Partition3Mount, WindowsSetup::Partition1Mount);
-		ShExecInfo.lpFile = L"cmd";
-		ShExecInfo.lpParameters = buffer1;
-		ShellExecuteExW(&ShExecInfo);
-		WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-		GetExitCodeProcess(ShExecInfo.hProcess, &retval);
-		if (retval)
-		{
-			swprintf(errorMessage, MAX_PATH, L"Failed to create boot files (0x%08x).", retval);
-			goto fail;
-		}
-		statusText = L"  Panther2K is mounting the Windows partition to a letter...";
-		Draw();
-		DoEvents();
-		wchar_t letter = WindowsSetup::GetFirstFreeDrive();
-		if (letter == L'0')
-		{
-			swprintf(errorMessage, MAX_PATH, L"Failed to create boot record. There are no drive letters available.");
-			goto fail;
-		}
-		swprintf(buffer2, MAX_PATH, L"%c:", letter);
-		if (!SetVolumeMountPointW(buffer2, WindowsSetup::Partition1Volume))
-		{
-			swprintf(errorMessage, MAX_PATH, L"Failed to create boot record. Mounting %s to mount point %s failed (0x%08x).", WindowsSetup::Partition1Volume, buffer2, GetLastError());
-			goto fail;
-		}
-		statusText = L"  Panther2K is creating the Master Boot Record...";
-		Draw();
-		DoEvents();
-		swprintf(buffer1, MAX_PATH, L"bootsect /nt60 %s /force /mbr", buffer2);
-		ShExecInfo.lpFile = L"cmd";
-		ShExecInfo.lpParameters = buffer1;
-		ShellExecuteExW(&ShExecInfo);
-		WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-		GetExitCodeProcess(ShExecInfo.hProcess, &retval);
-		if (retval)
-		{
-			swprintf(errorMessage, MAX_PATH, L"Failed to create Master Boot REcord (0x%08x).", retval);
-			goto fail;
-		}
-	}
-	else
-	{
-		statusText = L"  Panther2K is populating the EFI System Partition...";
-		Draw();
-		DoEvents();
-		swprintf(buffer1, MAX_PATH, L"/c bcdboot.exe %sWindows /s %s /f UEFI", WindowsSetup::Partition3Mount, WindowsSetup::Partition1Mount);
-		ShExecInfo.lpFile = L"cmd";
-		ShExecInfo.lpParameters = buffer1;
-		ShellExecuteExW(&ShExecInfo);
-		WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-		GetExitCodeProcess(ShExecInfo.hProcess, &retval);
-		if (retval)
-		{
-			swprintf(errorMessage, MAX_PATH, L"Failed to create boot files (0x%08x).", retval);
-			goto fail;
-		}
-
-		if (WindowsSetup::UseRecovery)
-		{
-			statusText = L"  Panther2K is copying the Windows RE files...";
-			Draw();
-			DoEvents();
-			swprintf(buffer1, MAX_PATH, L"%sRecovery\\WindowsRE\\", WindowsSetup::Partition2Mount);
-			if (retval = SHCreateDirectoryExW(NULL, buffer1, NULL))
-			{
-				if (WindowsSetup::ContinueWithoutRecovery)
-				{
-					swprintf(errorMessage, MAX_PATH, L"Failed to copy recovery image. Could not create the directory (0x%08x). Panther2K will continue without setting up Windows Recovery Environment.", retval);
-					MessageBoxPage* msgBox = new MessageBoxPage(errorMessage, false, this);
-					msgBox->ShowDialog();
-					delete msgBox;
-					goto end;
-				}
-
-				swprintf(errorMessage, MAX_PATH, L"Failed to copy recovery image. Could not create the directory (0x%08x).", retval);
-				goto fail;
-			}
-			swprintf(buffer1, MAX_PATH, L"%sRecovery\\WindowsRE\\Winre.wim", WindowsSetup::Partition2Mount);
-			swprintf(buffer2, MAX_PATH, L"%sWindows\\System32\\Recovery\\Winre.wim", WindowsSetup::Partition3Mount);
-			if (!CopyFileW(buffer2, buffer1, FALSE))
-			{
-				if (WindowsSetup::ContinueWithoutRecovery)
-				{
-					swprintf(errorMessage, MAX_PATH, L"Failed to copy recovery image (0x%08x). Panther2K will continue without setting up Windows Recovery Environment.", GetLastError());
-					MessageBoxPage* msgBox = new MessageBoxPage(errorMessage, false, this);
-					msgBox->ShowDialog();
-					delete msgBox;
-					goto end;
-				}
-
-				swprintf(errorMessage, MAX_PATH, L"Failed to copy recovery image (0x%08x).", GetLastError());
-				goto fail;
-			}
-			statusText = L"  Panther2K is enabling Windows RE...";
-			Draw();
-			DoEvents();
-			swprintf(buffer1, MAX_PATH, L"/c reagentc /setreimage /path %sRecovery\\WindowsRE /target %sWindows", WindowsSetup::Partition2Mount, WindowsSetup::Partition3Mount);
-			ShExecInfo.lpFile = L"cmd";
-			ShExecInfo.lpParameters = buffer1;
-			ShellExecuteExW(&ShExecInfo);
-			WaitForSingleObject(ShExecInfo.hProcess, INFINITE);
-			GetExitCodeProcess(ShExecInfo.hProcess, &retval);
-			if (retval)
-			{
-				if (WindowsSetup::ContinueWithoutRecovery)
-				{
-					swprintf(errorMessage, MAX_PATH, L"Failed to enable Windows RE (0x%08x). Panther2K will continue without setting up Windows Recovery Environment.", retval);
-					MessageBoxPage* msgBox = new MessageBoxPage(errorMessage, false, this);
-					msgBox->ShowDialog();
-					delete msgBox;
-					goto end;
-				}
-
-				swprintf(errorMessage, MAX_PATH, L"Failed to enable Windows RE (0x%08x).", retval);
-				goto fail;
-			}
-		}
-	}
-end:
-	Wow64RevertWow64FsRedirection(wow64State);
-	return;
-fail:
-	WindowsSetup::GetLogger()->Write(PANTHER_LL_BASIC, errorMessage);
-	MessageBoxPage* msgBox = new MessageBoxPage(errorMessage, true, this);
-	msgBox->ShowDialog();
-	delete msgBox;
-	goto end;
-}
-
 void BootPreparationPage::PrepareBootFilesNew()
 {
 	wchar_t pathBuffers[2][MAX_PATH];
@@ -296,9 +131,9 @@ void BootPreparationPage::PrepareBootFilesNew()
 	Create BCD store at S:\EFI\Microsoft\Boot\BCD
 	Add Windows Boot Manager to the BCD store
 
-	S:\ = WindowsSetup::Partition1Mount
-	R:\ = WindowsSetup::Partition2Mount
-	W:\ = WindowsSetup::Partition3Mount
+	S:\ = WindowsSetup::BootPartition.mountPoint
+	R:\ = WindowsSetup::RecoveryPartition.mountPoint
+	W:\ = WindowsSetup::SystemPartition.mountPoint
 	*/
 
 	/*
@@ -317,27 +152,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	logger->Write(PANTHER_LL_NORMAL, L"Generating Windows Boot Manager files...");
 
 	logger->Write(PANTHER_LL_DETAILED, L"Determining whether the system will be installed on a single disk...");
-	VOLUME_DISK_EXTENTS* vde = (VOLUME_DISK_EXTENTS*)safeMalloc(WindowsSetup::GetLogger(), sizeof(VOLUME_DISK_EXTENTS));
-
-	HANDLE volumeFileHandleP1 = CreateFileW(WindowsSetup::Partition1Volume, FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
-	if (volumeFileHandleP1 == INVALID_HANDLE_VALUE)
-		return;
-	HANDLE volumeFileHandleP3 = CreateFileW(WindowsSetup::Partition3Volume, FILE_READ_ATTRIBUTES | SYNCHRONIZE | FILE_TRAVERSE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, 0);
-	if (volumeFileHandleP3 == INVALID_HANDLE_VALUE)
-		return;
-
-	DWORD bytesCopied;
-	if (!DeviceIoControl(volumeFileHandleP1, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, vde, sizeof(VOLUME_DISK_EXTENTS), &bytesCopied, NULL))
-		return;
-	int p1Disk = vde->Extents[0].DiskNumber;
-	unsigned long long p1Offset = vde->Extents[0].StartingOffset.QuadPart;
-	if (!DeviceIoControl(volumeFileHandleP3, IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS, NULL, 0, vde, sizeof(VOLUME_DISK_EXTENTS), &bytesCopied, NULL))
-		return;
-	bool singleDisk = p1Disk == vde->Extents[0].DiskNumber;
-	CloseHandle(volumeFileHandleP1);
-	CloseHandle(volumeFileHandleP3);
-	free(vde);
-
+	bool singleDisk = WindowsSetup::SystemPartition.diskNumber == WindowsSetup::BootPartition.diskNumber;
 	logger->Write(PANTHER_LL_DETAILED, singleDisk ? L"The system will be installed on a single disk, not using VHD detection."
 		: L"The system will be installed on multiple disks, using VHD detection.");
 
@@ -354,9 +169,9 @@ void BootPreparationPage::PrepareBootFilesNew()
 	fos.fFlags = FOF_NO_UI;
 
 	swprintf_s(pathBuffers[0], WindowsSetup::UseLegacy ? L"%sWindows\\Boot\\PCAT\\*"
-													   : L"%sWindows\\Boot\\EFI\\*", WindowsSetup::Partition3Mount);
+													   : L"%sWindows\\Boot\\EFI\\*", WindowsSetup::SystemPartition.mountPoint);
 	swprintf_s(pathBuffers[1], WindowsSetup::UseLegacy ? L"%sBoot\\"
-													   : L"%sEFI\\Microsoft\\Boot\\", WindowsSetup::Partition1Mount);
+													   : L"%sEFI\\Microsoft\\Boot\\", WindowsSetup::BootPartition.mountPoint);
 	
 	pathBuffers[0][lstrlenW(pathBuffers[0]) + 1] = 0;
 	pathBuffers[1][lstrlenW(pathBuffers[1]) + 1] = 0;
@@ -381,7 +196,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	logger->Write(PANTHER_LL_DETAILED, L"Copying boot manager to proper location...");
 	if (!WindowsSetup::UseLegacy)
 	{
-		swprintf_s(pathBuffers[1], L"%sEFI\\Boot", WindowsSetup::Partition1Mount);
+		swprintf_s(pathBuffers[1], L"%sEFI\\Boot", WindowsSetup::BootPartition.mountPoint);
 		if (SHCreateDirectory(NULL, pathBuffers[1]) && GetLastError() != ERROR_ALREADY_EXISTS)
 		{
 			// Failed
@@ -393,9 +208,9 @@ void BootPreparationPage::PrepareBootFilesNew()
 
 	fos.wFunc = WindowsSetup::UseLegacy ? FO_MOVE : FO_COPY;
 	swprintf_s(pathBuffers[0], WindowsSetup::UseLegacy ? L"%sBoot\\bootmgr"
-													   : L"%sEFI\\Microsoft\\Boot\\bootmgfw.efi", WindowsSetup::Partition1Mount);
+													   : L"%sEFI\\Microsoft\\Boot\\bootmgfw.efi", WindowsSetup::BootPartition.mountPoint);
 	swprintf_s(pathBuffers[1], WindowsSetup::UseLegacy ? L"%s"
-													   : L"%sEFI\\Boot\\bootx64.efi", WindowsSetup::Partition1Mount);
+													   : L"%sEFI\\Boot\\bootx64.efi", WindowsSetup::BootPartition.mountPoint);
 
 	pathBuffers[0][lstrlenW(pathBuffers[0]) + 1] = 0;
 	pathBuffers[1][lstrlenW(pathBuffers[1]) + 1] = 0;
@@ -413,7 +228,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	logger->Write(PANTHER_LL_DETAILED, L"Looking for existing BCD...");
 	wchar_t commandBuffer[MAX_PATH + 128];
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"%sBoot\\BCD"
-													  : L"%sEFI\\Microsoft\\Boot\\BCD", WindowsSetup::Partition1Mount);
+													  : L"%sEFI\\Microsoft\\Boot\\BCD", WindowsSetup::BootPartition.mountPoint);
 	DWORD dwAttrib = GetFileAttributes(commandBuffer);
 
 	if (dwAttrib == INVALID_FILE_ATTRIBUTES ||
@@ -424,7 +239,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 		* Create BCD store
 		*/
 		swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /createstore %sBoot\\BCD"
-														  : L"bcdedit /createstore %sEFI\\Microsoft\\Boot\\BCD", WindowsSetup::Partition1Mount);
+														  : L"bcdedit /createstore %sEFI\\Microsoft\\Boot\\BCD", WindowsSetup::BootPartition.mountPoint);
 		if (int temp = _wsystem(commandBuffer))
 		{
 			// Failed
@@ -436,7 +251,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 		* Add Windows Boot Manager entry
 		*/
 		swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /create {bootmgr}"
-														  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /create {bootmgr}", WindowsSetup::Partition1Mount);
+														  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /create {bootmgr}", WindowsSetup::BootPartition.mountPoint);
 		if (int temp = _wsystem(commandBuffer))
 		{
 			// Failed
@@ -449,10 +264,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 		*/
 		// device = s:
 		swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {bootmgr} device %s%s",
-			WindowsSetup::Partition1Mount,
+			WindowsSetup::BootPartition.mountPoint,
 			WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD",
 			singleDisk ? L"hd_partition=" : L"partition=",
-			WindowsSetup::Partition1Mount);
+			WindowsSetup::BootPartition.mountPoint);
 		if (int temp = _wsystem(commandBuffer))
 		{
 			// Failed
@@ -460,7 +275,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 			return;
 		}
 		swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /set {bootmgr} path \\bootmgr"
-														  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {bootmgr} path \\EFI\\Microsoft\\Boot\\bootmgfw.efi", WindowsSetup::Partition1Mount);
+														  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {bootmgr} path \\EFI\\Microsoft\\Boot\\bootmgfw.efi", WindowsSetup::BootPartition.mountPoint);
 		if (int temp = _wsystem(commandBuffer))
 		{
 			// Failed
@@ -482,7 +297,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 
 	// Call bcdedit while redirecting stdout
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /create /application osloader"
-													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /create /application osloader", WindowsSetup::Partition1Mount);
+													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /create /application osloader", WindowsSetup::BootPartition.mountPoint);
 	
 	// Read the GUID of the created osloader entry
 	char guidBuffer[256];
@@ -516,7 +331,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	
 	// Set it to default
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /default %s"
-													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /default %s", WindowsSetup::Partition1Mount, guid);
+													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /default %s", WindowsSetup::BootPartition.mountPoint, guid);
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
@@ -526,10 +341,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 
 	// osdevice = W:
 	swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {default} osdevice %s%s",
-		WindowsSetup::Partition1Mount,
+		WindowsSetup::BootPartition.mountPoint,
 		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD",
 		singleDisk ? L"hd_partition=" : L"partition=",
-		WindowsSetup::Partition3Mount);
+		WindowsSetup::SystemPartition.mountPoint);
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
@@ -539,10 +354,10 @@ void BootPreparationPage::PrepareBootFilesNew()
 
 	// device = W:
 	swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {default} device %s%s",
-		WindowsSetup::Partition1Mount,
+		WindowsSetup::BootPartition.mountPoint,
 		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD",
 		singleDisk ? L"hd_partition=" : L"partition=",
-		WindowsSetup::Partition3Mount);
+		WindowsSetup::SystemPartition.mountPoint);
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
@@ -551,7 +366,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	}
 	// systemroot = \Windows
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /set {default} systemroot \\Windows"
-													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {default} systemroot \\Windows", WindowsSetup::Partition1Mount);
+													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {default} systemroot \\Windows", WindowsSetup::BootPartition.mountPoint);
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
@@ -560,7 +375,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	}
 	// path = \Windows\System32\winload.exe / .efi
 	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"bcdedit /store %sBoot\\BCD /set {default} path \\Windows\\System32\\winload.exe"
-													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {default} path \\Windows\\System32\\winload.efi", WindowsSetup::Partition1Mount);
+													  : L"bcdedit /store %sEFI\\Microsoft\\Boot\\BCD /set {default} path \\Windows\\System32\\winload.efi", WindowsSetup::BootPartition.mountPoint);
 	if (int temp = _wsystem(commandBuffer))
 	{
 		// Failed
@@ -570,7 +385,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 
 	// Set a name and display order, otherwise Boot Manager will refuse to boot the entry
 	swprintf_s(commandBuffer, L"bcdedit /store %s%s /set {default} description \"Windows\"",
-		WindowsSetup::Partition1Mount,
+		WindowsSetup::BootPartition.mountPoint,
 		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD");
 
 	if (int temp = _wsystem(commandBuffer))
@@ -581,7 +396,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	}
 
 	swprintf_s(commandBuffer, L"bcdedit /store %s%s /displayorder {default} /addfirst",
-		WindowsSetup::Partition1Mount,
+		WindowsSetup::BootPartition.mountPoint,
 		WindowsSetup::UseLegacy ? L"Boot\\BCD" : L"EFI\\Microsoft\\Boot\\BCD");
 
 	if (int temp = _wsystem(commandBuffer))
@@ -633,7 +448,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	// TODO: Add error checking here
 	// Set the settings for system hives
 	LSTATUS status;
-	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"%sBoot\\BCD" : L"%sEFI\\Microsoft\\Boot\\BCD", WindowsSetup::Partition1Mount);
+	swprintf_s(commandBuffer, WindowsSetup::UseLegacy ? L"%sBoot\\BCD" : L"%sEFI\\Microsoft\\Boot\\BCD", WindowsSetup::BootPartition.mountPoint);
 	HKEY bcdKey;
 	status = RegLoadKeyW(HKEY_LOCAL_MACHINE, L"p2k_bcd", commandBuffer);
 	status = RegOpenKeyW(HKEY_LOCAL_MACHINE, L"p2k_bcd", &bcdKey);
@@ -656,7 +471,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	if (WindowsSetup::UseLegacy)
 	{
 		logger->Write(PANTHER_LL_DETAILED, L"Writing legacy boot sector...");
-		swprintf_s(commandBuffer, L"bootsect /nt60 %c: /force /mbr", WindowsSetup::Partition1Mount[0]);
+		swprintf_s(commandBuffer, L"bootsect /nt60 %c: /force /mbr", WindowsSetup::BootPartition.mountPoint[0]);
 		if (int temp = _wsystem(commandBuffer))
 		{
 			// Failed
@@ -670,7 +485,7 @@ void BootPreparationPage::PrepareBootFilesNew()
 	* This is REQUIRED for sysprep to succeed on UEFI, optional for Legacy
 	*/
 	logger->Write(PANTHER_LL_DETAILED, L"Setting partition type of the boot partition...");
-	WinPartedDll::SetPartType(console, WindowsSetup::GetLogger(), p1Disk, p1Offset, WindowsSetup::UseLegacy ? 0x2700 : 0xef00);
+	WinPartedDll::SetPartType(console, WindowsSetup::GetLogger(), WindowsSetup::BootPartition.diskNumber, WindowsSetup::BootPartition.partOffset, WindowsSetup::UseLegacy ? 0x2700 : 0xef00);
 	
 	logger->Write(PANTHER_LL_DETAILED, L"Successfully prepared the newly installed OS for booting.");
 }

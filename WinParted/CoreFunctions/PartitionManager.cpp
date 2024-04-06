@@ -1159,8 +1159,6 @@ bool PartitionManager::LoadPartition(PartitionInformation* partition)
 	bool success = true;
 
 	CurrentPartition = *partition;
-	if (CurrentPartition.VolumeLoaded)
-		return true;
 
 	// Find out which volume belongs to the partition
 

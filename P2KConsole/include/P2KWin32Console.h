@@ -4,7 +4,7 @@
 class Win32Console : public Console
 {
 public:
-	void Init();
+	bool Init();
 	void Init(bool createNewConsole);
 
 	void SetPosition(long x, long y);

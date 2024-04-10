@@ -15,6 +15,7 @@ HFONT CustomConsole::font = 0;
 long CustomConsole::fontWidth = 0;
 long CustomConsole::fontHeight = 0;
 bool CustomConsole::isWindowClassCreated = false;
+SIZE CustomConsole::newConsoleSize = { 80, 25 };
 
 DWORD CustomConsole::consoleThreadId = -1;
 bool CustomConsole::isThreadRunning = false;
@@ -51,8 +52,8 @@ void CustomConsole::ConsoleMessageLoop()
 			console->hBuf = 0;
 			console->hdcBuf = 0;
 			console->fullScreen = false;
-			console->columns = 80;
-			console->rows = 25;
+			console->columns = newConsoleSize.cx;
+			console->rows = newConsoleSize.cy;
 			console->backColor = COLOR{ 0, 0, 170 };
 			console->foreColor = COLOR{ 170, 170, 170 };
 			console->backColorIndex = CONSOLE_COLOR_BG;
@@ -84,18 +85,24 @@ CustomConsole::CustomConsole() : Console()
 	outputBuffer = new std::deque<int>();
 }
 
-void CustomConsole::Init()
+bool CustomConsole::Init()
 {
+	Console::Init();
+
+	wchar_t INIFile[MAX_PATH] = L"";
+	wchar_t iniBuffer[MAX_PATH] = L"";
+	GetFullPathNameW(L"libpanther.ini", MAX_PATH, INIFile, NULL);
+
 	HANDLE event;
 	if (!isThreadRunning)
 	{
 		event = CreateEventW(NULL, TRUE, FALSE, NULL);
 		if (event == INVALID_HANDLE_VALUE)
-			return;
+			return false;
 
 		HANDLE hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ConsoleThreadProc, event, 0, &consoleThreadId);
 		if (hThread == INVALID_HANDLE_VALUE)
-			return;
+			return false;
 
 		WaitForSingleObject(event, INFINITE);
 		CloseHandle(event);
@@ -103,12 +110,13 @@ void CustomConsole::Init()
 
 	event = CreateEventW(NULL, TRUE, FALSE, NULL);
 	if (event == INVALID_HANDLE_VALUE)
-		return;
+		return false;
 
 	PostThreadMessageW(consoleThreadId, WM_CREATECONSOLE, (WPARAM)this, (LPARAM)event);
 
 	WaitForSingleObject(event, INFINITE);
 	CloseHandle(event);
+	return true;
 }
 
 void CustomConsole::SetPosition(long x, long y)
@@ -126,7 +134,8 @@ void CustomConsole::SetSize(long columns, long rows)
 {
 	SIZE t;
 	t.cx = columns; t.cy = rows;
-	SendMessage(WindowHandle, WM_RESIZECONSOLE, (WPARAM)&t, 0);
+	if (WindowHandle) SendMessage(WindowHandle, WM_RESIZECONSOLE, (WPARAM)&t, 0);
+	else newConsoleSize = t;
 }
 
 SIZE CustomConsole::GetSize()
@@ -313,6 +322,10 @@ void CustomConsole::UpdateColorTable()
 
 bool CustomConsole::createFont()
 {
+	wchar_t INIFile[MAX_PATH] = L"";
+	wchar_t iniBuffer[MAX_PATH] = L"";
+	GetFullPathNameW(L"libpanther.ini", MAX_PATH, INIFile, NULL);
+
 	HRSRC res = FindResourceW(GetModuleHandle(NULL), MAKEINTRESOURCE(IDR_FONT_IBM), RT_RCDATA);
 	HGLOBAL mem = LoadResource(GetModuleHandle(NULL), res);
 	void* data = LockResource(mem);
@@ -325,10 +338,22 @@ bool CustomConsole::createFont()
 		return false;
 	}
 
-	font = CreateFontW(16, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Bm437 IBM VGA 8x16");
-	//font = CreateFontW(12, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Consolas");
+	GetPrivateProfileStringW(L"CustomConsole", L"FontSmoothing", L"No", iniBuffer, 4, INIFile);
+	bool smooth = _wcsicmp(iniBuffer, L"Yes") == 0;
+	GetPrivateProfileStringW(L"CustomConsole", L"FontFamily", L"Bm437 IBM VGA 8x16", iniBuffer, MAX_PATH, INIFile);
+	fontHeight = GetPrivateProfileIntW(L"CustomConsole", L"FontHeight", 16, INIFile);
+	font = CreateFontW(fontHeight, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, smooth ? DEFAULT_QUALITY : NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, iniBuffer);
+	
+	LOGFONTW lf = { 0 };
+	GetObjectW(font, sizeof(LOGFONTW), &lf);
+
+	if (lstrcmpW(iniBuffer, lf.lfFaceName))
+	{
+		MessageBoxW(NULL, L"Loading the font specified in CustomConsole\\FontFamily in libpanther.ini failed. This application will exit.", L"LibPanther console", MB_OK | MB_ICONERROR);
+		return false;
+	}
+	
 	fontWidth = 8;
-	fontHeight = 16;
 
 	return font;
 }
@@ -367,6 +392,7 @@ LRESULT CALLBACK CustomConsole::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPAR
 	HFONT oldFont;
 	HBRUSH oldBrush;
 	HPEN oldPen;
+	TEXTMETRICW tm;
 
 	switch (Msg)
 	{
@@ -399,8 +425,11 @@ LRESULT CALLBACK CustomConsole::WndProc(HWND hWnd, UINT Msg, WPARAM wParam, LPAR
 
 		SetBkMode(hdcBuf, TRANSPARENT);
 		SelectObject(hdcBuf, font);
+		GetTextMetricsW(hdcBuf, &tm);
+		fontWidth = tm.tmAveCharWidth;
 		SelectObject(hdcBuf, hBuf);
 		EndPaint(hWnd, &ps);
+		SetPixelScale(1);
 		break;
 	case WM_SYSKEYDOWN:
 		if (wParam != VK_F10) break;

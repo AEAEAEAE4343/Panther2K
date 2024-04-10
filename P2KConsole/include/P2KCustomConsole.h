@@ -26,7 +26,7 @@ public:
 	// Constructor
 	CustomConsole();
 
-	void Init();
+	bool Init();
 	void SetPosition(long x, long y);
 	POINT GetPosition();
 	void SetSize(long columns, long rows);
@@ -54,6 +54,7 @@ private:
 	static bool isThreadRunning;
 	static void __stdcall ConsoleThreadProc(HANDLE pEvent);
 	static void ConsoleMessageLoop();
+	static SIZE newConsoleSize;
 
 	// Output information
 	BITMAPINFO bitmapInfo;

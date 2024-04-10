@@ -4,7 +4,7 @@
 
 bool rgbMode = false;
 
-void Win32Console::Init()
+bool Win32Console::Init()
 {
 	//hScreenBuffer = CreateConsoleScreenBuffer(GENERIC_READ | GENERIC_WRITE, NULL, NULL, CONSOLE_TEXTMODE_BUFFER, NULL);
     printf("Enabling virtual terminal...");
@@ -26,6 +26,8 @@ void Win32Console::Init()
             i, colorTable[i].R, colorTable[i].G, colorTable[i].B);
         WriteConsoleW(hScreenBuffer, buffer, lstrlenW(buffer), NULL, NULL);
     }
+    
+    return true;
 }
 
 void Win32Console::Init(bool createNewConsole)

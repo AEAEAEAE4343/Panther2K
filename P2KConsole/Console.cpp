@@ -14,6 +14,41 @@ Console::Console()
     {
         colorTableSize = 6;
         colorTable = (COLOR*)malloc(sizeof(COLOR) * colorTableSize);
+        colorTable[CONSOLE_COLOR_BG] =      COLOR{ 0, 0, 170 };
+        colorTable[CONSOLE_COLOR_FG] =      COLOR{ 170, 170, 170 };
+        colorTable[CONSOLE_COLOR_ERROR] =   COLOR{ 170, 0, 0 };
+        colorTable[CONSOLE_COLOR_PROGBAR] = COLOR{ 255, 255, 0 };
+        colorTable[CONSOLE_COLOR_LIGHTFG] = COLOR{ 255, 255, 255 };
+        colorTable[CONSOLE_COLOR_DARKFG] =  COLOR{ 0, 0, 0 };
+    }
+}
+
+COLOR ParseColor(const wchar_t* text, bool* success)
+{
+    unsigned char rgb[3] = { 0 };
+    *success = swscanf_s(text, L"%hhu,%hhu,%hhu", &rgb[0], &rgb[1], &rgb[2]) == 3;
+    return COLOR{ rgb[0], rgb[1], rgb[2] };
+}
+
+bool Console::Init()
+{
+    wchar_t INIFile[MAX_PATH] = L"";
+    wchar_t iniBuffer[MAX_PATH] = L"";
+    GetFullPathNameW(L"libpanther.ini", MAX_PATH, INIFile, NULL);
+    
+    // Console
+    GetPrivateProfileStringW(L"Console", L"ColorScheme", L"Windows Setup", iniBuffer, MAX_PATH, INIFile);
+    if (!lstrcmpW(iniBuffer, L"Windows Setup"))
+    {
+        colorTable[CONSOLE_COLOR_BG] = COLOR{ 0, 0, 168 };
+        colorTable[CONSOLE_COLOR_FG] = COLOR{ 168, 168, 168 };
+        colorTable[CONSOLE_COLOR_ERROR] = COLOR{ 168, 0, 0 };
+        colorTable[CONSOLE_COLOR_PROGBAR] = COLOR{ 255, 255, 0 };
+        colorTable[CONSOLE_COLOR_LIGHTFG] = COLOR{ 255, 255, 255 };
+        colorTable[CONSOLE_COLOR_DARKFG] = COLOR{ 0, 0, 0 };
+    }
+    else if (!lstrcmpW(iniBuffer, L"BIOS (Blue)"))
+    {
         colorTable[CONSOLE_COLOR_BG] = COLOR{ 0, 0, 170 };
         colorTable[CONSOLE_COLOR_FG] = COLOR{ 170, 170, 170 };
         colorTable[CONSOLE_COLOR_ERROR] = COLOR{ 170, 0, 0 };
@@ -21,11 +56,57 @@ Console::Console()
         colorTable[CONSOLE_COLOR_LIGHTFG] = COLOR{ 255, 255, 255 };
         colorTable[CONSOLE_COLOR_DARKFG] = COLOR{ 0, 0, 0 };
     }
-}
+    else if (!lstrcmpW(iniBuffer, L"BIOS (Black)"))
+    {
+        colorTable[CONSOLE_COLOR_BG] = COLOR{ 0, 0, 0 };
+        colorTable[CONSOLE_COLOR_FG] = COLOR{ 170, 170, 170 };
+        colorTable[CONSOLE_COLOR_ERROR] = COLOR{ 170, 0, 0 };
+        colorTable[CONSOLE_COLOR_PROGBAR] = COLOR{ 255, 255, 0 };
+        colorTable[CONSOLE_COLOR_LIGHTFG] = COLOR{ 255, 255, 255 };
+        colorTable[CONSOLE_COLOR_DARKFG] = COLOR{ 0, 0, 0 };
+    }
+    else if (!lstrcmpW(iniBuffer, L"Custom"))
+    {
+        bool success = false;
+        GetPrivateProfileStringW(L"Console", L"BackgroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+        colorTable[CONSOLE_COLOR_BG] = ParseColor(iniBuffer, &success);
+        if (!success) goto fail;
+        GetPrivateProfileStringW(L"Console", L"ForegroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+        colorTable[CONSOLE_COLOR_FG] = ParseColor(iniBuffer, &success);
+        if (!success) goto fail;
+        GetPrivateProfileStringW(L"Console", L"ErrorColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+        colorTable[CONSOLE_COLOR_ERROR] = ParseColor(iniBuffer, &success);
+        if (!success) goto fail;
+        GetPrivateProfileStringW(L"Console", L"ProgressBarColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+        colorTable[CONSOLE_COLOR_PROGBAR] = ParseColor(iniBuffer, &success);
+        if (!success) goto fail;
+        GetPrivateProfileStringW(L"Console", L"LightForegroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+        colorTable[CONSOLE_COLOR_LIGHTFG] = ParseColor(iniBuffer, &success);
+        if (!success) goto fail;
+        GetPrivateProfileStringW(L"Console", L"DarkForegroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
+        colorTable[CONSOLE_COLOR_DARKFG] = ParseColor(iniBuffer, &success);
+        if (!success) goto fail;
+    fail:
+        MessageBoxW(NULL, L"The color scheme specified in libpanther.ini is invalid. This application will exit.", L"LibPanther console", MB_OK | MB_ICONERROR);
+        return false;
+    }
+    else
+    {
+        MessageBoxW(NULL, L"The value Console\\ColorScheme specified in libpanther.ini is invalid. This application will exit.", L"LibPanther console", MB_OK | MB_ICONERROR);
+        return false;
+    }
 
-void Console::Init()
-{ 
-    
+    UpdateColorTable();
+    int columns = GetPrivateProfileIntW(L"Console", L"Columns", 80, INIFile);
+    int rows = GetPrivateProfileIntW(L"Console", L"Rows", 25, INIFile);
+    SetSize(columns, rows);
+
+    int fontHeight = GetPrivateProfileIntW(L"Console", L"FontHeight", 16, INIFile);
+    if (fontHeight == -1)
+    {
+        MessageBoxW(NULL, L"The value Console\\FontHeight specified in libpanther.ini is invalid. This application will exit.", L"LibPanther console", MB_OK | MB_ICONERROR);
+        return false;
+    }
 }
 
 void Console::SetPosition(long, long) { }

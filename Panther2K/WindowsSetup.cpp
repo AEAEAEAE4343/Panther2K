@@ -363,16 +363,9 @@ bool WindowsSetup::LocateWimFile(wchar_t* buffer)
 	return false;
 }
 
-COLOR ParseColor(const wchar_t* text, bool* success)
-{
-	unsigned char rgb[3] = { 0 };
-	*success = swscanf_s(text, L"%hhu,%hhu,%hhu", &rgb[0], &rgb[1], &rgb[2]) == 3;
-	return COLOR{ rgb[0], rgb[1], rgb[2] };
-}
-
 bool WindowsSetup::LoadConfig()
 {
-	const wchar_t* INIFileRelative = L".\\panther.ini";
+	const wchar_t* INIFileRelative = L".\\panther2k.ini";
 
 	DWORD length = 0; 
 	MessageBoxPage* msgBox = 0;
@@ -387,7 +380,7 @@ bool WindowsSetup::LoadConfig()
 
 	wchar_t INIFile[MAX_PATH] = L"";
 	wchar_t iniBuffer[MAX_PATH] = L"";
-	GetFullPathNameW(L"panther.ini", MAX_PATH, INIFile, NULL);
+	GetFullPathNameW(L"panther2k.ini", MAX_PATH, INIFile, NULL);
 
 	wchar_t logBuffer[MAX_PATH] = L"";
 	wsprintfW(logBuffer, L"Loading configuration file '%s'...", INIFile);
@@ -510,103 +503,6 @@ bool WindowsSetup::LoadConfig()
 
 	// EndPhase
 	RebootTimer = GetPrivateProfileIntW(L"EndPhase", L"RebootTimer", 10000, INIFile);
-
-	// Console
-	GetPrivateProfileStringW(L"Console", L"ColorScheme", L"Windows Setup", iniBuffer, MAX_PATH, INIFile);
-	if (!lstrcmpW(iniBuffer, L"Windows Setup"))
-	{
-		ConfigBackgroundColor = COLOR{ 0, 0, 168 };
-		ConfigForegroundColor = COLOR{ 168, 168, 168 };
-		ConfigErrorColor = COLOR{ 168, 0, 0 };
-		ConfigProgressBarColor = COLOR{ 255, 255, 0 };
-		ConfigLightForegroundColor = COLOR{ 255, 255, 255 };
-		ConfigDarkForegroundColor = COLOR{ 0, 0, 0 };
-	}
-	else if (!lstrcmpW(iniBuffer, L"BIOS (Blue)"))
-	{
-		ConfigBackgroundColor = COLOR{ 0, 0, 170 };
-		ConfigForegroundColor = COLOR{ 170, 170, 170 };
-		ConfigErrorColor = COLOR{ 170, 0, 0 };
-		ConfigProgressBarColor = COLOR{ 255, 255, 0 };
-		ConfigLightForegroundColor = COLOR{ 255, 255, 255 };
-		ConfigDarkForegroundColor = COLOR{ 0, 0, 0 };
-	}
-	else if (!lstrcmpW(iniBuffer, L"BIOS (Black)"))
-	{
-		ConfigBackgroundColor = COLOR{ 0, 0, 0 };
-		ConfigForegroundColor = COLOR{ 170, 170, 170 };
-		ConfigErrorColor = COLOR{ 170, 0, 0 };
-		ConfigProgressBarColor = COLOR{ 255, 255, 0 };
-		ConfigLightForegroundColor = COLOR{ 255, 255, 255 };
-		ConfigDarkForegroundColor = COLOR{ 0, 0, 0 };
-	}
-	else if (!lstrcmpW(iniBuffer, L"Custom"))
-	{
-		goto parse;
-	fail:
-		msgBox = new MessageBoxPage(L"The color scheme specified in the config file is invalid. Panther2K will exit.", true, currentPage);
-		msgBox->ShowDialog();
-		delete msgBox;
-		return false;
-	parse:
-		bool success = false;
-		GetPrivateProfileStringW(L"Console", L"BackgroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
-		ConfigBackgroundColor = ParseColor(iniBuffer, &success);
-		if (!success) goto fail;
-		GetPrivateProfileStringW(L"Console", L"ForegroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
-		ConfigForegroundColor = ParseColor(iniBuffer, &success);
-		if (!success) goto fail;
-		GetPrivateProfileStringW(L"Console", L"ErrorColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
-		ConfigErrorColor = ParseColor(iniBuffer, &success);
-		if (!success) goto fail;
-		GetPrivateProfileStringW(L"Console", L"ProgressBarColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
-		ConfigProgressBarColor = ParseColor(iniBuffer, &success);
-		if (!success) goto fail;
-		GetPrivateProfileStringW(L"Console", L"LightForegroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
-		ConfigLightForegroundColor = ParseColor(iniBuffer, &success);
-		if (!success) goto fail;
-		GetPrivateProfileStringW(L"Console", L"DarkForegroundColor", L"Fail", iniBuffer, MAX_PATH, INIFile);
-		ConfigDarkForegroundColor = ParseColor(iniBuffer, &success);
-		if (!success) goto fail;
-	}
-	else
-	{
-		msgBox = new MessageBoxPage(L"The value Console\\ColorScheme specified in the config file is invalid. Panther2K will exit.", true, currentPage);
-		msgBox->ShowDialog();
-		delete msgBox;
-		return false;
-	}
-
-	int columns = GetPrivateProfileIntW(L"Console", L"Columns", 80, INIFile);
-	int rows = GetPrivateProfileIntW(L"Console", L"Rows", 25, INIFile);
-	console->SetSize(columns, rows);
-	
-	int fontHeight = GetPrivateProfileIntW(L"Console", L"FontHeight", 16, INIFile);
-	if (fontHeight == -1)
-	{
-		msgBox = new MessageBoxPage(L"The value Console\\FontHeight specified in the config file is invalid. Panther2K will exit.", true, currentPage);
-		msgBox->ShowDialog();
-		delete msgBox;
-		return false;
-	}
-	GetPrivateProfileStringW(L"Console", L"FontSmoothing", L"No", iniBuffer, 4, INIFile);
-	bool smooth = lstreqW(iniBuffer, L"Yes");
-	GetPrivateProfileStringW(L"Console", L"Font", L"Bm437 IBM VGA 8x16", iniBuffer, MAX_PATH, INIFile);
-	HFONT font = CreateFontW(fontHeight, 0, 0, 0, 400, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, smooth ? DEFAULT_QUALITY : NONANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, iniBuffer);
-	
-	LOGFONTW lf = { 0 };
-	GetObjectW(font, sizeof(LOGFONTW), &lf);
-	
-	if (lstrcmpW(iniBuffer, lf.lfFaceName))
-	{
-		msgBox = new MessageBoxPage(L"Loading the font specified in Console\\FontHeight in the config file failed. Panther2K will exit.", true, currentPage);
-		msgBox->ShowDialog();
-		delete msgBox;
-		return false;
-	}
-	
-	GetPrivateProfileStringW(L"Console", L"UseCodePage437", L"No", iniBuffer, 4, INIFile);
-	UseCp437 = lstreqW(iniBuffer, L"Yes");
 
 	return true;
 }

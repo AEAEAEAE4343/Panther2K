@@ -29,7 +29,7 @@ class Console
 {
 public:
 	Console();
-	virtual void Init();
+	virtual bool Init();
 
 	virtual void SetPosition(long x, long y);
 	virtual POINT GetPosition();

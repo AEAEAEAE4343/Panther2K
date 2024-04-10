@@ -909,6 +909,100 @@ void WindowsSetup::LoadPhase(int phase)
 		//if (!SkipPhase4_1)
 		//{
 	case 5:
+	{
+		wchar_t messageBuffer[MAX_PATH];
+		wchar_t letterBuffer[2];
+		const wchar_t* mountPoint;
+		wcscpy_s(letterBuffer, L"0");
+		logger->Write(PANTHER_LL_NORMAL, L"Mounting target partitions...");
+
+		// Mount all target partitions
+		if (lstrlenW(SystemPartition.mountPoint) == 0)
+		{
+			logger->Write(PANTHER_LL_DETAILED, L"Mounting system partition...");
+			letterBuffer[0] = GetFirstFreeDrive();
+			if (IsWinPE && letterBuffer[0] == '0')
+			{
+				wlogf(logger, PANTHER_LL_BASIC, MAX_PATH, L"Failed: no drive letters available, requesting exit");
+				MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to mount partition. There are no drive letters available. Panther2K will exit.", false, currentPage);
+				msgBox->ShowDialog();
+				delete msgBox;
+				RequestExit();
+				return;
+			}
+			mountPoint = !IsWinPE ? L"$Panther2K\\System\\" : letterBuffer;
+			HRESULT hRes = WinPartedDll::MountPartition(console, logger, SystemPartition.diskNumber, SystemPartition.partOffset, mountPoint);
+			if (FAILED(hRes))
+			{
+				wlogf(logger, PANTHER_LL_BASIC, MAX_PATH, L"Mounting partition failed (0x%08X), requesting exit", hRes);
+				swprintf_s(messageBuffer, L"Failed to mount partition (0x%08X). Panther2K will exit.", hRes);
+				MessageBoxPage* msgBox = new MessageBoxPage(messageBuffer, false, currentPage);
+				msgBox->ShowDialog();
+				delete msgBox;
+				RequestExit();
+				return;
+			}
+			wcscpy_s(SystemPartition.mountPoint, mountPoint);
+			if (IsWinPE) wcscat_s(SystemPartition.mountPoint, L":\\");
+		}
+		if (UseRecovery && lstrlenW(RecoveryPartition.mountPoint) == 0)
+		{
+			logger->Write(PANTHER_LL_DETAILED, L"Mounting recovery partition...");
+			letterBuffer[0] = GetFirstFreeDrive();
+			if (IsWinPE && letterBuffer[0] == '0')
+			{
+				wlogf(logger, PANTHER_LL_BASIC, MAX_PATH, L"Failed: no drive letters available, requesting exit");
+				MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to mount partition. There are no drive letters available. Panther2K will exit.", false, currentPage);
+				msgBox->ShowDialog();
+				delete msgBox;
+				RequestExit();
+				return;
+			}
+			mountPoint = !IsWinPE ? L"$Panther2K\\Recovery\\" : letterBuffer;
+			HRESULT hRes = WinPartedDll::MountPartition(console, logger, RecoveryPartition.diskNumber, RecoveryPartition.partOffset, mountPoint);
+			if (FAILED(hRes)) 
+			{
+				wlogf(logger, PANTHER_LL_BASIC, MAX_PATH, L"Mounting partition failed (0x%08X), requesting exit", hRes);
+				swprintf_s(messageBuffer, L"Failed to mount partition (0x%08X). Panther2K will exit.", hRes);
+				MessageBoxPage* msgBox = new MessageBoxPage(messageBuffer, false, currentPage);
+				msgBox->ShowDialog();
+				delete msgBox;
+				RequestExit();
+				return;
+			}
+			wcscpy_s(RecoveryPartition.mountPoint, mountPoint);
+			if (IsWinPE) wcscat_s(RecoveryPartition.mountPoint, L":\\");
+		}
+		if (lstrlenW(BootPartition.mountPoint) == 0)
+		{
+			logger->Write(PANTHER_LL_DETAILED, L"Mounting boot partition...");
+			letterBuffer[0] = GetFirstFreeDrive();
+			if (letterBuffer[0] == '0')
+			{
+				wlogf(logger, PANTHER_LL_BASIC, MAX_PATH, L"Failed: no drive letters available, requesting exit");
+				MessageBoxPage* msgBox = new MessageBoxPage(L"Failed to mount partition. There are no drive letters available. Panther2K will exit.", false, currentPage);
+				msgBox->ShowDialog();
+				delete msgBox;
+				RequestExit();
+				return;
+			}
+			mountPoint = letterBuffer;
+			HRESULT hRes = WinPartedDll::MountPartition(console, logger, BootPartition.diskNumber, BootPartition.partOffset, mountPoint);
+			if (FAILED(hRes))
+			{
+				wlogf(logger, PANTHER_LL_BASIC, MAX_PATH, L"Mounting partition failed (0x%08X), requesting exit", hRes);
+				swprintf_s(messageBuffer, L"Failed to mount partition (0x%08X). Panther2K will exit.", hRes);
+				MessageBoxPage* msgBox = new MessageBoxPage(messageBuffer, false, currentPage);
+				msgBox->ShowDialog();
+				delete msgBox;
+				RequestExit();
+				return;
+			}
+			wcscpy_s(BootPartition.mountPoint, mountPoint);
+			if (IsWinPE) wcscat_s(BootPartition.mountPoint, L":\\");
+		}
+	}
+
 		// Apply the image
 		page = new WimApplyPage();
 		LoadPage(page);

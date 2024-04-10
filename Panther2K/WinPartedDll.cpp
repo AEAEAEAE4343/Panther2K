@@ -9,7 +9,7 @@ EXPORTS
    ApplyP2KLayoutToDiskGPT   @3
    ApplyP2KLayoutToDiskMBR   @4
    SetPartType   @5
-   FormatAndOrMountPartition   @6
+   ORD_MountPartition   @6
 */
 
 #define ORD_InitializeCRT             (LPCSTR)1
@@ -17,13 +17,14 @@ EXPORTS
 #define ORD_ApplyP2KLayoutToDiskGPT   (LPCSTR)3
 #define ORD_ApplyP2KLayoutToDiskMBR   (LPCSTR)4
 #define ORD_SetPartType               (LPCSTR)5
-#define ORD_FormatAndOrMountPartition (LPCSTR)6
+#define ORD_MountPartition (LPCSTR)6
 
 typedef void (*InitializeCRTStub)();
 typedef int (*RunWinPartedStub)(Console*, LibPanther::Logger*);
 typedef HRESULT(*ApplyP2KLayoutToDiskGPTStub)(Console*, LibPanther::Logger*, int, bool, wchar_t***, wchar_t***);
 typedef HRESULT(*ApplyP2KLayoutToDiskMBRStub)(Console*, LibPanther::Logger*, int, bool, wchar_t***, wchar_t***);
 typedef HRESULT(*SetPartTypeStub)(Console*, LibPanther::Logger*, int, unsigned long long, short);
+typedef HRESULT(*MountPartitionStub)(Console*, LibPanther::Logger*, int, unsigned long long, const wchar_t*);
 
 bool WinPartedDll::partedInitialized = false;
 HMODULE WinPartedDll::hWinParted = NULL;
@@ -64,6 +65,17 @@ HRESULT WinPartedDll::SetPartType(Console* console, LibPanther::Logger* logger, 
 
 	auto setPartType = (SetPartTypeStub)GetProcAddress(hWinParted, ORD_SetPartType);
 	return setPartType(console, logger, diskNumber, partOffset, partType);
+}
+
+HRESULT WinPartedDll::MountPartition(Console* console, LibPanther::Logger* logger, int diskNumber, unsigned long long partOffset, const wchar_t* mountPoint)
+{
+
+	HRESULT res;
+	if (!partedInitialized && (res = InitParted()) != ERROR_SUCCESS)
+		return MAKE_HRESULT(SEVERITY_ERROR, FACILITY_WIN32, res);
+
+	auto mountPartition = (MountPartitionStub)GetProcAddress(hWinParted, ORD_MountPartition);
+	return mountPartition(console, logger, diskNumber, partOffset, mountPoint);
 }
 
 HRESULT WinPartedDll::InitParted()

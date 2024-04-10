@@ -339,8 +339,8 @@ HRESULT PerformVdsOperation(PartitionInformation* partition, const wchar_t* file
 					wchar_t letter = 0;
 					PartitionManager::GetLogger()->Write(PANTHER_LL_VERBOSE, L"Querying existing partition drive letter...");
 					hResult = pAdvDisk->GetDriveLetter(partition->StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize, &letter);
-					Assert(hResult, goto releaseCOM);
-					if (letter != 0)
+					if (hResult != S_FALSE) Assert(hResult, goto releaseCOM);
+					if (letter >= L'A' && letter <= 'Z')
 					{
 						wlogf(PartitionManager::GetLogger(), PANTHER_LL_VERBOSE, 47, L"Unmounting partition from drive letter %c:\\...", letter);
 						hResult = pAdvDisk->DeleteDriveLetter(partition->StartLBA.ULL * PartitionManager::CurrentDisk.SectorSize, letter);
@@ -394,7 +394,7 @@ releaseCOM:
 
 	CoUninitialize();
 
-	if (!formatComplete || mountPoint && !mountComplete)
+	if (!formatComplete || (mountPoint && !mountComplete))
 	{
 		if (hResult == S_OK) PartitionManager::GetLogger()->Write(PANTHER_LL_NORMAL, L"Warning: format/mount operation failed, but result is S_OK!");
 		return hResult;

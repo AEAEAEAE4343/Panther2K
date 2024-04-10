@@ -358,7 +358,22 @@ void PartitionCreationPage::RunPage()
 
 			int count = PartitionManager::CurrentDiskPartitionCount;
 			PartitionManager::AddPartition(&newPartition, 0);
-			PartitionManager::LoadPartition(&PartitionManager::CurrentDiskPartitions[count]);
+			int partIndex = -1;
+			for (int i = 0; i < PartitionManager::CurrentDiskPartitionCount; i++)
+			{
+				if (PartitionManager::CurrentDiskPartitions[i].StartLBA.ULL == newPartition.StartLBA.ULL)
+				{
+					partIndex = i;
+				}
+			}
+			if (partIndex == -1)
+			{
+				PartitionManager::ShowMessagePage(L"An unexpected error occurred while creating the partition: The partition may have been created, but WinParted cannot find it.", MessagePageType::OK, MessagePageUI::Error);
+				PartitionManager::PopPage();
+				return;
+			}
+
+			PartitionManager::LoadPartition(&PartitionManager::CurrentDiskPartitions[partIndex]);
 			PartitionManager::PopPage();
 			PartitionManager::PushPage(new PartitionTypeSelectionPage());
 			return;

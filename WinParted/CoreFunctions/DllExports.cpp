@@ -313,6 +313,10 @@ extern "C" HRESULT _stdcall SetPartType(Console* console, LibPanther::Logger* lo
 	PartitionManager::ShowNoInfoDialogs = true;
 	HRESULT returnValue = ERROR_INVALID_HANDLE;
 
+	PartitionManager::CurrentPage = new Page();
+	PartitionManager::CurrentPage->Initialize(console);
+	PartitionManager::CurrentPage->Update();
+
 	if (!LoadPartitionFromOffset(diskNumber, partOffset)) goto retFalse;
 	if (!PartitionManager::SetCurrentPartitionType(partType)) goto retFalse;
 	if (!PartitionManager::SavePartitionTableToDisk()) goto retFalse;
@@ -323,7 +327,7 @@ retFalse:
 	return returnValue;
 }
 
-extern "C" HRESULT _stdcall FormatAndOrMountPartition(Console * console, LibPanther::Logger * logger, int diskNumber, unsigned long long partOffset, const wchar_t* fileSystem, const wchar_t* mountPoint)
+extern "C" HRESULT _stdcall MountPartition(Console * console, LibPanther::Logger * logger, int diskNumber, unsigned long long partOffset, const wchar_t* mountPoint)
 {
 	PartitionManager::SetConsole(console);
 	PartitionManager::SetLogger(logger);
@@ -331,7 +335,7 @@ extern "C" HRESULT _stdcall FormatAndOrMountPartition(Console * console, LibPant
 	HRESULT result = ERROR_BAD_UNIT;
 
 	if (!LoadPartitionFromOffset(diskNumber, partOffset)) goto retFalse;
-	result = PartitionManager::FormatAndMountPartition(&PartitionManager::CurrentPartition, fileSystem, mountPoint);
+	result = PartitionManager::MountPartition(&PartitionManager::CurrentPartition, mountPoint);
 
 retFalse:
 	PartitionManager::ShowNoInfoDialogs = false;
